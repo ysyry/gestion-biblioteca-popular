@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import Counter
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
@@ -65,6 +66,64 @@ async def loans_contact(repo: KohaRepository = Depends(get_repository)):
     dias_atraso > 0 → vencido; = 0 → vence hoy; < 0 → por vencer (faltan N días).
     """
     return await repo.loans_contact()
+
+
+# ── Estadísticas ────────────────────────────────────────────────────────────
+def _dias_int(r) -> int | None:
+    try:
+        return int(r.get("dias_atraso"))
+    except (TypeError, ValueError):
+        return None
+
+
+@router.get("/stats", tags=["stats"])
+async def stats(repo: KohaRepository = Depends(get_repository)):
+    """KPIs calculados sobre los préstamos vigentes (reporte loans_contact)."""
+    rows = await repo.loans_contact()
+    total = len(rows)
+    vencidos = [r for r in rows if (_dias_int(r) or 0) > 0]
+    por_vencer = [r for r in rows if _dias_int(r) is not None and _dias_int(r) <= 0]
+    socios = {r.get("cardnumber") for r in rows if r.get("cardnumber")}
+    socios_venc = {r.get("cardnumber") for r in vencidos if r.get("cardnumber")}
+
+    buckets = {"por_vencer": 0, "venc_1_30": 0, "venc_31_90": 0, "venc_90": 0}
+    for r in rows:
+        d = _dias_int(r)
+        if d is None:
+            continue
+        if d <= 0:
+            buckets["por_vencer"] += 1
+        elif d <= 30:
+            buckets["venc_1_30"] += 1
+        elif d <= 90:
+            buckets["venc_31_90"] += 1
+        else:
+            buckets["venc_90"] += 1
+
+    titulos = Counter((r.get("title") or "(sin título)") for r in rows)
+    top_titulos = [{"label": t, "count": c} for t, c in titulos.most_common(10)]
+
+    por_socio: Counter = Counter()
+    nombres: dict = {}
+    for r in rows:
+        c = r.get("cardnumber")
+        if not c:
+            continue
+        por_socio[c] += 1
+        nombres[c] = (f'{r.get("surname", "")}, {r.get("firstname", "")}').strip(", ")
+    top_socios = [{"label": nombres.get(c, c), "count": n} for c, n in por_socio.most_common(10)]
+
+    return {
+        "total_vigentes": total,
+        "vencidos": len(vencidos),
+        "por_vencer": len(por_vencer),
+        "pct_vencidos": round(100 * len(vencidos) / total, 1) if total else 0,
+        "socios_con_prestamos": len(socios),
+        "socios_con_vencidos": len(socios_venc),
+        "buckets": buckets,
+        "top_titulos": top_titulos,
+        "top_socios": top_socios,
+    }
 
 
 # ── Socios ────────────────────────────────────────────────────────────────────
