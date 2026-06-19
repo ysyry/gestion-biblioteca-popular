@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Biblioteca Popular Osvaldo Bayer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ── Paleta oficial — Manual de Identidad BPOB ─────────────────────────
+     Primaria: amarillo #EEB500 · magenta #861E92
+     Secundaria: rojo #C7002A · verde #15AA6C · negro
+     Sistema: naranja #F5821F · navy #13235B (fondos del manual) */
+  :root {
+    --navy:#13235B; --navy-2:#1c2f6e;
+    --orange:#F5821F; --yellow:#EEB500; --magenta:#861E92; --magenta-d:#6d177a;
+    --red:#C7002A; --green:#15AA6C;
+    --ink:#1f2430; --muted:#6b7280; --bg:#f4f5f7; --card:#ffffff; --line:#e6e8ec;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family:"Poppins",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+         background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  a { color:var(--magenta); }
+  h1,h2,h3 { font-weight:700; letter-spacing:-.01em; }
+
+  /* ── Layout full-screen: sidebar + contenido ──────────────────────────── */
+  .layout { display:flex; min-height:100vh; }
+  .sidebar { width:248px; flex-shrink:0; background:var(--navy); color:#fff;
+             display:flex; flex-direction:column; position:sticky; top:0; height:100vh; }
+  .sidebar .brand { display:flex; align-items:center; gap:.7rem; padding:1.4rem 1.3rem 1.2rem; }
+  .sidebar .brand img { height:42px; width:42px; object-fit:contain; background:#fff;
+             border-radius:10px; padding:4px; }
+  .sidebar .brand .t { line-height:1.15; }
+  .sidebar .brand .t b { font-size:.96rem; font-weight:700; display:block; }
+  .sidebar .brand .t span { font-size:.72rem; opacity:.65; font-weight:400; }
+
+  .tabs { display:flex; flex-direction:column; gap:.15rem; padding:.4rem .7rem; margin-top:.4rem; }
+  .tabs button { text-align:left; background:transparent; border:none; color:rgba(255,255,255,.78);
+             padding:.7rem .9rem; border-radius:9px; cursor:pointer; font-size:.92rem;
+             font-family:inherit; font-weight:500; border-left:3px solid transparent; transition:.12s; }
+  .tabs button:hover { background:rgba(255,255,255,.07); color:#fff; }
+  .tabs button.active { background:rgba(255,255,255,.12); color:#fff; font-weight:600;
+             border-left-color:var(--yellow); }
+
+  .sidebar .foot { margin-top:auto; padding:1rem 1.3rem 1.3rem; border-top:1px solid rgba(255,255,255,.1);
+             font-size:.82rem; }
+  .sidebar .foot .user { display:block; opacity:.8; margin-bottom:.55rem; word-break:break-word; }
+  .sidebar .foot button { background:transparent; border:1px solid rgba(255,255,255,.35); color:#fff;
+             padding:.4rem .8rem; border-radius:8px; cursor:pointer; font-family:inherit; font-size:.82rem; width:100%; }
+  .sidebar .foot button:hover { background:rgba(255,255,255,.12); }
+
+  /* ── Contenido ─────────────────────────────────────────────────────────── */
+  .content { flex:1; min-width:0; padding:2.1rem 2.6rem 3rem; }
+  .page-title { margin:0 0 1.4rem; font-size:1.55rem; color:var(--navy); font-weight:700; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:1.4rem; box-shadow:0 1px 3px rgba(20,30,60,.05); }
+
+  /* ── Login ─────────────────────────────────────────────────────────────── */
+  .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center;
+          background:radial-gradient(circle at 30% 20%, #1c2f6e, var(--navy)); padding:1rem; }
+  .login { width:380px; max-width:100%; text-align:center; }
+  .login img { height:72px; margin-bottom:.6rem; }
+  .login h2 { margin:.2rem 0 .1rem; font-size:1.18rem; color:var(--navy); }
+  .login p.sub { color:var(--muted); margin:0 0 1.3rem; font-size:.84rem; }
+  label { display:block; text-align:left; font-size:.78rem; color:var(--muted); margin:.7rem 0 .25rem; font-weight:500; }
+  input, textarea { width:100%; padding:.6rem .75rem; border:1px solid var(--line); border-radius:9px;
+          font-size:.95rem; font-family:inherit; background:#fff; }
+  input:focus, textarea:focus { outline:none; border-color:var(--magenta); box-shadow:0 0 0 3px rgba(134,30,146,.14); }
+  textarea { resize:vertical; }
+  button.primary { margin-top:1.1rem; width:100%; background:var(--magenta); color:#fff; border:none;
+          padding:.7rem; border-radius:9px; font-size:.95rem; cursor:pointer; font-weight:600; font-family:inherit; }
+  button.primary:hover { background:var(--magenta-d); }
+  button.primary:disabled { opacity:.6; cursor:default; }
+
+  /* ── Toolbar / búsqueda ────────────────────────────────────────────────── */
+  /* Formularios de automáticos */
+  .auto-card { margin-bottom:1.5rem; }
+  .auto-card .auto-head { display:flex; justify-content:space-between; align-items:center; gap:1rem;
+          border-bottom:1px solid var(--line); padding-bottom:.8rem; margin-bottom:1rem; }
+  .auto-card h3 { margin:0; color:var(--navy); font-size:1.1rem; }
+  .switch { display:inline-flex; align-items:center; gap:.5rem; font-weight:600; color:var(--navy); font-size:.9rem; cursor:pointer; }
+  .frow { display:flex; gap:1rem; flex-wrap:wrap; }
+  .frow > div { flex:1; min-width:130px; }
+  .lastrun { font-size:.8rem; color:var(--muted); margin-top:.2rem; }
+  .auto-actions { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:1rem; align-items:center; }
+  .auto-actions .btn-sec { font-size:.85rem; }
+  .varhint { font-size:.76rem; color:var(--muted); margin:.3rem 0 0; }
+  .varhint code { background:#f3eef8; color:var(--magenta); border-radius:5px; padding:.05rem .3rem; }
+
+  /* Sub-tabs (control segmentado) */
+  .subtabs { display:inline-flex; background:#eef0f3; border-radius:11px; padding:.25rem; margin-bottom:1.1rem; gap:.2rem; }
+  .subtabs button { border:none; background:transparent; padding:.42rem 1.3rem; border-radius:8px; cursor:pointer;
+          font-family:inherit; font-size:.88rem; color:var(--muted); font-weight:500; }
+  .subtabs button.active { background:#fff; color:var(--navy); box-shadow:0 1px 2px rgba(20,30,60,.12); font-weight:600; }
+
+  .toolbar { display:flex; gap:.6rem; margin-bottom:1.1rem; }
+  .toolbar input { flex:1; }
+  .toolbar button { background:var(--orange); color:#fff; border:none; padding:0 1.3rem;
+          border-radius:9px; cursor:pointer; font-weight:600; font-family:inherit; font-size:.9rem; }
+  .toolbar button:hover { filter:brightness(.95); }
+
+  /* ── Tablas ────────────────────────────────────────────────────────────── */
+  table { width:100%; border-collapse:collapse; font-size:.89rem; }
+  th, td { text-align:left; padding:.6rem .7rem; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; }
+  th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+  th.sortable:hover { color:var(--magenta); }
+  tbody tr.clickable { cursor:pointer; }
+  tbody tr.clickable:hover td { background:#f7f4fb; }
+
+  .badge { display:inline-block; border-radius:999px; padding:.1rem .6rem; font-size:.76rem; font-weight:600; white-space:nowrap; }
+  td:has(.badge) { white-space:nowrap; }
+  .badge.red { background:#fbe4e8; color:var(--red); }
+  .badge.green { background:#e3f5ec; color:var(--green); }
+  .badge.gray { background:#eef0f3; color:#5b6270; }
+
+  .msg { padding:.75rem .9rem; border-radius:9px; font-size:.88rem; margin-bottom:1rem; }
+  .msg.error { background:#fbe4e8; color:var(--red); border:1px solid #f3c2cc; }
+  .hide { display:none; }
+  .meta { color:var(--muted); font-size:.82rem; margin-top:.7rem; }
+  .empty { color:var(--muted); font-size:.86rem; font-style:italic; }
+
+  /* ── Ficha del socio ───────────────────────────────────────────────────── */
+  .ficha-head { border-bottom:3px solid var(--yellow); padding-bottom:1rem; margin-bottom:.6rem; }
+  .ficha-head h2 { margin:0 0 .3rem; color:var(--navy); font-size:1.4rem; }
+  .ficha-head .datos { color:var(--muted); font-size:.88rem; line-height:1.6; }
+  .seccion { margin-top:1.6rem; }
+  .seccion h3 { font-size:.95rem; color:var(--navy); margin:0 0 .6rem; display:flex; align-items:center; gap:.55rem;
+          padding-left:.6rem; border-left:4px solid var(--orange); }
+  .seccion h3 .count { background:var(--yellow); color:#5a3f00; border-radius:999px; font-size:.72rem;
+          padding:.07rem .55rem; font-weight:700; }
+  .btn-volver { background:#fff; border:1px solid var(--line); border-radius:9px; padding:.45rem .9rem;
+          cursor:pointer; font-size:.85rem; font-family:inherit; margin-bottom:1.2rem; color:var(--ink); }
+  .btn-volver:hover { border-color:var(--magenta); color:var(--magenta); }
+
+  /* ── Mails ─────────────────────────────────────────────────────────────── */
+  .mail-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.3rem; align-items:start; }
+  @media (max-width:980px){ .mail-grid { grid-template-columns:1fr; } }
+  .mail-grid h3 { margin:0 0 .8rem; color:var(--navy); font-size:1.02rem; }
+  .scrolllist { max-height:280px; overflow:auto; }
+  .recip-box { max-height:340px; overflow:auto; border:1px solid var(--line); border-radius:10px;
+          padding:.3rem .7rem; margin-top:.6rem; background:#fcfcfd; }
+  .recip { display:flex; align-items:center; gap:.5rem; padding:.45rem .2rem; border-bottom:1px solid var(--line); font-size:.86rem; }
+  .recip .who { flex:1; }
+  .recip .who small { color:var(--muted); }
+  .recip .noemail { color:var(--red); font-size:.76rem; font-weight:600; }
+  .recip .tag { color:var(--magenta); font-size:.74rem; }
+  .recip button { background:none; border:1px solid var(--line); color:var(--muted); cursor:pointer;
+          font-size:.76rem; padding:.18rem .5rem; border-radius:6px; font-family:inherit; }
+  .recip button:hover { border-color:var(--magenta); color:var(--magenta); }
+  .pill { display:inline-block; background:#fff4e8; border:1px solid #f3d9bb; color:#9a5a12; border-radius:7px;
+          padding:.18rem .5rem; font-size:.76rem; cursor:pointer; }
+  .pill:hover { background:#fee9d2; }
+  .vars code { background:#f3eef8; color:var(--magenta); border-radius:6px; padding:.08rem .35rem;
+          font-size:.78rem; cursor:pointer; }
+  .preview { background:#f7f8fa; border:1px dashed var(--line); border-radius:9px; padding:.8rem;
+          font-size:.85rem; white-space:pre-wrap; margin-top:.5rem; line-height:1.5; }
+  .opt { display:flex; align-items:center; gap:.45rem; font-size:.85rem; margin:.7rem 0; font-weight:400; color:var(--ink); }
+  .opt input[type=text]{ flex:1; }
+  /* Modal personalizar */
+  .modal-bg { position:fixed; inset:0; background:rgba(19,35,91,.45); display:flex; align-items:center;
+          justify-content:center; z-index:50; }
+  .modal { background:#fff; border-radius:14px; padding:1.4rem; width:min(560px,92vw); max-height:88vh; overflow:auto; }
+  .modal h3 { margin:0 0 .9rem; color:var(--navy); }
+  .row-btns { display:flex; gap:.6rem; justify-content:flex-end; margin-top:1.1rem; }
+  .btn-sec { background:#fff; border:1px solid var(--line); border-radius:9px; padding:.55rem .95rem;
+          cursor:pointer; font-family:inherit; }
+
+  /* ── Responsive: sidebar arriba en pantallas chicas ────────────────────── */
+  @media (max-width:760px){
+    .layout { flex-direction:column; }
+    .sidebar { width:100%; height:auto; position:static; }
+    .tabs { flex-direction:row; flex-wrap:wrap; }
+    .sidebar .foot { margin-top:0; }
+    .content { padding:1.4rem 1.2rem 2rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Login ─────────────────────────────────────────────── -->
+<div id="loginView" class="login-wrap">
+  <section class="card login">
+    <img src="/logo.png" alt="Biblioteca Popular Osvaldo Bayer" />
+    <h2>Biblioteca Popular Osvaldo Bayer</h2>
+    <p class="sub">Gestión de la biblioteca</p>
+    <div id="loginMsg"></div>
+    <form id="loginForm">
+      <label for="u">Usuario de Koha</label>
+      <input id="u" autocomplete="username" required />
+      <label for="p">Contraseña</label>
+      <input id="p" type="password" autocomplete="current-password" required />
+      <button class="primary" id="loginBtn" type="submit">Entrar</button>
+    </form>
+    <p class="meta">Entrá con tu mismo usuario y contraseña del sistema Koha.</p>
+  </section>
+</div>
+
+<!-- ── App ───────────────────────────────────────────────── -->
+<div id="appView" class="hide">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="/logo.png" alt="BPOB" />
+        <div class="t"><b>Osvaldo Bayer</b><span>Gestión de biblioteca</span></div>
+      </div>
+      <nav class="tabs">
+        <button data-tab="loans" class="active">Préstamos</button>
+        <button data-tab="members">Socios</button>
+        <button data-tab="mails">Mails</button>
+        <button data-tab="auto">Automáticos</button>
+      </nav>
+      <div class="foot">
+        <span class="user" id="userLabel"></span>
+        <button id="logoutBtn">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <h1 class="page-title" id="pageTitle">Préstamos vigentes</h1>
+      <div id="panelMsg"></div>
+
+      <!-- Vista de listado -->
+      <div id="listView" class="card">
+        <div id="loansSubtabs" class="subtabs hide">
+          <button data-sub="active" class="active">Vigentes</button>
+          <button data-sub="overdue">Vencidos</button>
+        </div>
+        <div id="listFilter" class="toolbar hide">
+          <input id="listFilterInput" placeholder="Filtrar la lista por socio, título o código…" />
+        </div>
+        <div id="memberToolbar" class="toolbar hide">
+          <input id="memberQuery" placeholder="Buscar socio por apellido, nombre o carnet…" />
+          <button id="memberSearchBtn">Buscar</button>
+        </div>
+        <div id="tableWrap">Cargando…</div>
+        <div class="meta" id="rowCount"></div>
+      </div>
+
+      <!-- Ficha del socio -->
+      <div id="fichaView" class="card hide"></div>
+
+      <!-- Mails -->
+      <div id="mailsView" class="hide">
+        <div class="mail-grid">
+          <!-- Destinatarios -->
+          <div class="card">
+            <h3>1 · Destinatarios (<span id="recipCount">0</span>)</h3>
+            <div class="toolbar">
+              <input id="mailSearch" placeholder="Buscar socio para agregar…" />
+              <button id="mailSearchBtn">Buscar</button>
+            </div>
+            <div class="meta" style="margin:.2rem 0 .6rem">
+              Atajos:
+              <span class="pill" id="addOverdue">+ Agregar socios con vencidos</span>
+              <span class="pill" id="addUpcoming">+ Agregar socios con por vencer</span>
+            </div>
+            <div id="mailSearchResults" class="scrolllist"></div>
+            <div id="recipList" class="recip-box"></div>
+          </div>
+
+          <!-- Mensaje -->
+          <div class="card">
+            <h3>2 · Mensaje para todos</h3>
+            <label>Asunto</label>
+            <input id="mailSubject" placeholder="Ej: Novedades de la Biblioteca" />
+            <label>Cuerpo</label>
+            <textarea id="mailBody" rows="8" placeholder="Hola {{nombre}}, te escribimos desde la Biblioteca…"></textarea>
+            <p class="meta vars">Datos del socio (clic para insertar):
+              <code data-v="nombre">{{nombre}}</code>
+              <code data-v="apellido">{{apellido}}</code>
+              <code data-v="carnet">{{carnet}}</code>
+              <code data-v="email">{{email}}</code>
+            </p>
+            <p class="meta vars">Libros del socio:
+              <code data-v="vencidos">{{vencidos}}</code>
+              <code data-v="por_vencer">{{por_vencer}}</code>
+              <code data-v="prestamos">{{prestamos}}</code>
+              <code data-v="cantidad_vencidos">{{cantidad_vencidos}}</code>
+              <code data-v="cantidad_por_vencer">{{cantidad_por_vencer}}</code>
+              <code data-v="cantidad_prestamos">{{cantidad_prestamos}}</code>
+            </p>
+            <div class="meta">Vista previa (primer destinatario):</div>
+            <div id="mailPreview" class="preview">—</div>
+
+            <h3 style="margin-top:1.3rem">3 · Envío</h3>
+            <label class="opt"><input type="radio" name="mailMode" value="test" checked /> Enviar una prueba a una dirección</label>
+            <label class="opt" style="padding-left:1.5rem">Dirección de prueba: <input type="text" id="mailTestTo" placeholder="tu@email.com" /></label>
+            <label class="opt"><input type="radio" name="mailMode" value="real" /> Enviar de verdad a los socios</label>
+            <button class="primary" id="mailSendBtn">Enviar prueba</button>
+            <div id="mailResult" style="margin-top:.8rem"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Automáticos -->
+      <div id="autoView" class="hide">
+        <!-- Resumen interno -->
+        <div class="card auto-card">
+          <div class="auto-head">
+            <div>
+              <h3>Resumen interno a la biblioteca</h3>
+              <div class="meta" style="margin:0">Un mail periódico con los préstamos por vencer y vencidos.</div>
+              <div class="lastrun" id="ri_lastrun"></div>
+            </div>
+            <label class="switch"><input type="checkbox" id="ri_enabled" /> Activado</label>
+          </div>
+          <label>A qué correo se envía</label>
+          <input id="ri_to" placeholder="bibliotecabayer@gmail.com (si lo dejás vacío usa el remitente)" />
+          <div class="frow" style="margin-top:.4rem">
+            <div><label>Enviar cada (días)</label><input id="ri_cada" type="number" min="1" /></div>
+            <div><label>"Por vencer" = vence dentro de (días)</label><input id="ri_antes" type="number" min="0" /></div>
+          </div>
+          <label>Asunto</label>
+          <input id="ri_subject" />
+          <label>Cuerpo</label>
+          <textarea id="ri_body" rows="7"></textarea>
+          <p class="varhint">Variables: <code>{{fecha}}</code> <code>{{lista_vencidos}}</code> <code>{{lista_por_vencer}}</code> <code>{{total_vencidos}}</code> <code>{{total_por_vencer}}</code> <code>{{total_socios_deben}}</code> <code>{{dias_antes}}</code></p>
+          <label>Pie del mensaje</label>
+          <textarea id="ri_footer" rows="2"></textarea>
+          <div class="auto-actions">
+            <button class="primary" style="width:auto;margin:0" id="ri_save">Guardar</button>
+            <button class="btn-sec" id="ri_preview">Vista previa</button>
+            <button class="btn-sec" id="ri_test">Probar (a una dirección)</button>
+            <button class="btn-sec" id="ri_run">Enviar ahora</button>
+          </div>
+          <div id="ri_result" style="margin-top:.8rem"></div>
+        </div>
+
+        <!-- Recordatorio a socios -->
+        <div class="card auto-card">
+          <div class="auto-head">
+            <div>
+              <h3>Recordatorio a los socios</h3>
+              <div class="meta" style="margin:0">Un mail a cada socio con préstamos por vencer o vencidos.</div>
+              <div class="lastrun" id="rs_lastrun"></div>
+            </div>
+            <label class="switch"><input type="checkbox" id="rs_enabled" /> Activado</label>
+          </div>
+          <div class="frow">
+            <div><label>Enviar cada (días)</label><input id="rs_cada" type="number" min="1" /></div>
+            <div><label>"Por vencer" = vence dentro de (días)</label><input id="rs_antes" type="number" min="0" /></div>
+            <div><label>Avisar vencidos desde (días de atraso)</label><input id="rs_umbral" type="number" min="0" /></div>
+          </div>
+          <div class="auto-actions" style="margin:.6rem 0 0">
+            <label class="opt"><input type="checkbox" id="rs_incv" /> Incluir vencidos</label>
+            <label class="opt"><input type="checkbox" id="rs_incp" /> Incluir por vencer</label>
+          </div>
+          <label>Asunto</label>
+          <input id="rs_subject" />
+          <label>Cuerpo</label>
+          <textarea id="rs_body" rows="7"></textarea>
+          <p class="varhint">Variables: <code>{{nombre}}</code> <code>{{apellido}}</code> <code>{{carnet}}</code> <code>{{vencidos}}</code> <code>{{por_vencer}}</code> <code>{{cantidad_vencidos}}</code> <code>{{cantidad_por_vencer}}</code></p>
+          <label>Pie del mensaje</label>
+          <textarea id="rs_footer" rows="2"></textarea>
+          <div class="auto-actions">
+            <button class="primary" style="width:auto;margin:0" id="rs_save">Guardar</button>
+            <button class="btn-sec" id="rs_preview">Vista previa</button>
+            <button class="btn-sec" id="rs_test">Probar (a una dirección)</button>
+            <button class="btn-sec" id="rs_run">Enviar ahora</button>
+          </div>
+          <div id="rs_result" style="margin-top:.8rem"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+let token = localStorage.getItem("token") || "";
+let currentTab = "active";
+const TAB_TITLES = { loans:"Préstamos", members:"Socios", mails:"Envío de mails", auto:"Envíos automáticos" };
+let loanSub = "active";
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({ "Content-Type":"application/json" }, opts.headers||{});
+  if (token) headers["Authorization"] = "Bearer " + token;
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  if (res.status === 401) { doLogout(); throw new Error("Sesión expirada. Volvé a entrar."); }
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(data.detail || ("Error HTTP "+res.status));
+  return data;
+}
+const $ = (id)=>document.getElementById(id);
+function show(el,on){ el.classList.toggle("hide",!on); }
+function msg(el,t,k){ el.innerHTML = t ? `<div class="msg ${k}">${t}</div>` : ""; }
+function money(v){ const n=Number(v); if(Number.isNaN(n)) return v??""; return "$"+n.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fecha(v){ return v ? String(v).slice(0,10) : ""; }
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+// ── Login ──
+$("loginForm").addEventListener("submit", async (e)=>{
+  e.preventDefault(); const btn=$("loginBtn"); btn.disabled=true; msg($("loginMsg"),"","");
+  try {
+    const d = await api("/api/auth/login",{method:"POST",body:JSON.stringify({username:$("u").value,password:$("p").value})});
+    token=d.access_token; localStorage.setItem("token",token); localStorage.setItem("username",d.username); enterApp();
+  } catch(err){ msg($("loginMsg"),err.message,"error"); } finally { btn.disabled=false; }
+});
+function doLogout(){ token=""; localStorage.removeItem("token"); show($("appView"),false); show($("loginView"),true); }
+$("logoutBtn").addEventListener("click", async ()=>{ try{ await api("/api/auth/logout",{method:"POST"});}catch(_){} doLogout(); });
+
+// ── Tabs ──
+function enterApp(){
+  show($("loginView"),false); show($("appView"),true);
+  $("userLabel").textContent = localStorage.getItem("username")||"";
+  selectTab("loans");
+}
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>selectTab(b.dataset.tab)));
+document.querySelectorAll("#loansSubtabs button").forEach(b=>b.addEventListener("click",()=>selectLoanView(b.dataset.sub)));
+function selectTab(tab){
+  currentTab=tab;
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  $("pageTitle").textContent = TAB_TITLES[tab] || "";
+  show($("fichaView"),false);
+  show($("mailsView"), tab==="mails");
+  show($("autoView"), tab==="auto");
+  show($("listView"), tab!=="mails" && tab!=="auto");
+  show($("loansSubtabs"), tab==="loans");
+  show($("memberToolbar"), tab==="members");
+  show($("listFilter"), tab==="loans");
+  $("listFilterInput").value="";
+  msg($("panelMsg"),"",""); $("rowCount").textContent="";
+  if (tab==="loans") selectLoanView(loanSub);
+  else if (tab==="members") { $("tableWrap").innerHTML = '<p class="empty">Buscá un socio por apellido, nombre o carnet.</p>'; }
+  else if (tab==="mails") { renderRecipients(); updatePreview(); }
+  else if (tab==="auto") { loadAuto(); }
+}
+function selectLoanView(sub){
+  loanSub=sub;
+  document.querySelectorAll("#loansSubtabs button").forEach(b=>b.classList.toggle("active",b.dataset.sub===sub));
+  $("listFilterInput").value="";
+  sortKey = sub==="overdue" ? "dias_atraso" : null;
+  sortDir = sub==="overdue" ? -1 : 1;
+  if (sub==="overdue") load("/api/loans/overdue", OVERDUE_COLS);
+  else load("/api/loans/active", ACTIVE_COLS);
+}
+$("listFilterInput").addEventListener("input", applyListFilter);
+$("memberSearchBtn").addEventListener("click", searchMembers);
+$("memberQuery").addEventListener("keydown",(e)=>{ if(e.key==="Enter") searchMembers(); });
+async function searchMembers(){
+  const q=$("memberQuery").value.trim(); if(!q) return;
+  await load("/api/members?q="+encodeURIComponent(q), MEMBER_COLS, true);
+}
+
+// ── Columnas ──
+const ACTIVE_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Código","barcode"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha]];
+const OVERDUE_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Teléfono","phone"],["Título","title"],["Venció","date_due",fecha],["Atraso","dias_atraso",(v)=>`<span class="badge red">${v} días</span>`]];
+const MEMBER_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Email","email"],["Teléfono","phone"],["Categoría","category"]];
+
+let loadedRows=[], loadedCols=[], loadedClickable=false;
+let sortKey=null, sortDir=1;  // dir: 1 asc, -1 desc
+async function load(path, cols, clickable=false){
+  const wrap=$("tableWrap"); wrap.innerHTML="Cargando…";
+  try {
+    loadedRows=await api(path); loadedCols=cols; loadedClickable=clickable;
+    applyListFilter();
+  } catch(err){ wrap.innerHTML=""; msg($("panelMsg"),err.message,"error"); }
+}
+function cmp(a,b){
+  const na=Number(a), nb=Number(b);
+  const bothNum = a!=="" && a!=null && b!=="" && b!=null && !Number.isNaN(na) && !Number.isNaN(nb);
+  if(bothNum) return na-nb;
+  return String(a??"").localeCompare(String(b??""),"es",{numeric:true});
+}
+function sortBy(key){
+  if(sortKey===key) sortDir=-sortDir; else { sortKey=key; sortDir=1; }
+  applyListFilter();
+}
+function applyListFilter(){
+  const wrap=$("tableWrap");
+  const q=($("listFilterInput").value||"").trim().toLowerCase();
+  let rows = q ? loadedRows.filter(r=>loadedCols.some(([_,k])=>String(r[k]??"").toLowerCase().includes(q))) : loadedRows.slice();
+  if(sortKey) rows = rows.slice().sort((a,b)=>cmp(a[sortKey],b[sortKey])*sortDir);
+  renderTable(wrap, loadedCols, rows, loadedClickable);
+  $("rowCount").textContent = q ? `${rows.length} de ${loadedRows.length} resultado(s).` : `${loadedRows.length} resultado(s).`;
+}
+function renderTable(wrap, cols, rows, clickable){
+  if(!rows.length){ wrap.innerHTML='<p class="empty">Sin resultados.</p>'; return; }
+  const head=cols.map(([l,k])=>{
+    const ind = sortKey===k ? (sortDir>0?' ↑':' ↓') : '';
+    return `<th class="sortable" data-key="${esc(k)}">${l}${ind}</th>`;
+  }).join("");
+  const body=rows.map(r=>{
+    const tds=cols.map(([_,k,fmt])=>{ const v=r[k]??""; return `<td>${fmt&&v!==""?fmt(v):esc(v)}</td>`; }).join("");
+    const attr=clickable?` class="clickable" data-card="${esc(r.cardnumber)}"`:"";
+    return `<tr${attr}>${tds}</tr>`;
+  }).join("");
+  wrap.innerHTML=`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  wrap.querySelectorAll("th.sortable").forEach(th=>th.addEventListener("click",()=>sortBy(th.dataset.key)));
+  if(clickable) wrap.querySelectorAll("tr.clickable").forEach(tr=>tr.addEventListener("click",()=>openFicha(tr.dataset.card)));
+}
+
+// ── Ficha del socio ──
+async function openFicha(card){
+  show($("listView"),false); show($("fichaView"),true);
+  $("fichaView").innerHTML="Cargando ficha…";
+  try {
+    const d=await api(`/api/members/${encodeURIComponent(card)}/profile`);
+    renderFicha(d);
+  } catch(err){ $("fichaView").innerHTML=`<button class="btn-volver" onclick="backToList()">← Volver</button>`; msg($("panelMsg"),err.message,"error"); }
+}
+window.backToList=function(){ show($("fichaView"),false); show($("listView"),true); };
+
+function tabla(cols, rows){
+  if(!rows||!rows.length) return '<p class="empty">Sin registros.</p>';
+  const head=cols.map(([l])=>`<th>${l}</th>`).join("");
+  const body=rows.map(r=>"<tr>"+cols.map(([_,k,fmt])=>{const v=r[k]??""; return `<td>${fmt&&v!==""?fmt(v):esc(v)}</td>`;}).join("")+"</tr>").join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+function renderFicha(d){
+  const s=d.socio;
+  const contacto=[s.email,s.phone,s.mobile].filter(Boolean).join(" · ");
+  const dir=[s.address,s.city].filter(Boolean).join(", ");
+
+  $("fichaView").innerHTML = `
+    <button class="btn-volver" onclick="backToList()">← Volver a la lista</button>
+    <div class="ficha-head">
+      <h2>${esc(s.firstname||"")} ${esc(s.surname||"")}</h2>
+      <div class="datos">
+        Carnet <b>${esc(s.cardnumber||"")}</b> · Categoría ${esc(s.category||"—")}<br>
+        ${contacto?esc(contacto)+"<br>":""}
+        ${dir?esc(dir)+"<br>":""}
+        Socio desde ${fecha(s.dateenrolled)||"—"} · vence ${fecha(s.dateexpiry)||"—"}
+      </div>
+    </div>
+
+    <div class="seccion">
+      <h3>Préstamos vigentes <span class="count">${d.prestamos_vigentes.length}</span></h3>
+      ${tabla([["Código","barcode"],["Título","title"],["Autor","author"],["Prestado","issuedate",fecha],["Vence","date_due",fecha]], d.prestamos_vigentes)}
+    </div>
+
+    <div class="seccion">
+      <h3>Historial de préstamos <span class="count">${d.historial.length}</span></h3>
+      ${tabla([["Título","title"],["Autor","author"],["Prestado","issuedate",fecha],["Devuelto","returndate",fecha]], d.historial)}
+    </div>
+  `;
+}
+
+// ── Mails ─────────────────────────────────────────────────────────────
+let recipients = []; // {carnet, nombre, apellido, email, ctx?, subjectOverride?, bodyOverride?}
+function recipVars(r){ return Object.assign(
+  {nombre:r.nombre||"", apellido:r.apellido||"", carnet:r.carnet||"", email:r.email||"",
+   vencidos:"ninguno", por_vencer:"ninguno", prestamos:"ninguno",
+   cantidad_vencidos:"0", cantidad_por_vencer:"0", cantidad_prestamos:"0"},
+  r.ctx||{}); }
+
+// Calcula las etiquetas de libros (vencidos / por vencer) a partir de una lista de préstamos.
+function ctxVars(venc, porv, todos){
+  const fmtV = l=>`• ${l.title||l.barcode||"(sin título)"} (venció ${fecha(l.date_due)||"?"})`;
+  const fmtP = l=>`• ${l.title||l.barcode||"(sin título)"} (vence ${fecha(l.date_due)||"?"})`;
+  return {
+    vencidos: venc.length ? venc.map(fmtV).join("\n") : "ninguno",
+    por_vencer: porv.length ? porv.map(fmtP).join("\n") : "ninguno",
+    prestamos: todos.length ? todos.map(fmtP).join("\n") : "ninguno",
+    cantidad_vencidos: String(venc.length),
+    cantidad_por_vencer: String(porv.length),
+    cantidad_prestamos: String(todos.length),
+  };
+}
+function ctxFromLoans(loans){
+  const today=new Date().toISOString().slice(0,10);
+  const venc=[], porv=[];
+  (loans||[]).forEach(l=>{ const d=fecha(l.date_due); if(!d) return; (d<today?venc:porv).push(l); });
+  return ctxVars(venc, porv, loans||[]);
+}
+function tplRender(tpl, vars){ return (tpl||"").replace(/{{\s*(\w+)\s*}}/g,(m,k)=> k in vars ? vars[k] : m); }
+
+function renderRecipients(){
+  $("recipCount").textContent = recipients.length;
+  const conEmail = recipients.filter(r=>r.email).length;
+  if(!recipients.length){ $("recipList").innerHTML='<p class="empty">Sin destinatarios. Buscá socios o usá el atajo.</p>'; return; }
+  $("recipList").innerHTML =
+    `<div class="meta" style="margin-bottom:.3rem">${conEmail} con email · ${recipients.length-conEmail} sin email (se omiten)</div>` +
+    recipients.map(r=>`
+    <div class="recip">
+      <span class="who">${esc(r.apellido)}, ${esc(r.nombre)} <small>(${esc(r.carnet)})</small>
+        ${r.email?`<br><small>${esc(r.email)}</small>`:'<br><span class="noemail">sin email</span>'}
+        ${(r.subjectOverride!=null||r.bodyOverride!=null)?'<br><span class="tag">mensaje personalizado</span>':''}
+      </span>
+      <button title="Personalizar" onclick="personalizar('${esc(r.carnet)}')">Editar</button>
+      <button title="Quitar" onclick="removeRecipient('${esc(r.carnet)}')">Quitar</button>
+    </div>`).join("");
+}
+window.removeRecipient=function(carnet){ recipients=recipients.filter(r=>r.carnet!==carnet); renderRecipients(); updatePreview(); };
+function addRecipient(r){ if(!recipients.some(x=>x.carnet===r.carnet)) recipients.push(r); }
+window.addFromSearch=async function(s){
+  if(recipients.some(x=>x.carnet===s.cardnumber)) return;
+  const r={carnet:s.cardnumber,nombre:s.firstname,apellido:s.surname,email:s.email,ctx:null};
+  recipients.push(r); renderRecipients(); updatePreview();
+  try { const d=await api(`/api/members/${encodeURIComponent(s.cardnumber)}/profile`);
+        r.ctx=ctxFromLoans(d.prestamos_vigentes); renderRecipients(); updatePreview(); } catch(_){}
+};
+
+async function mailDoSearch(){
+  const q=$("mailSearch").value.trim(); if(!q) return;
+  const wrap=$("mailSearchResults"); wrap.innerHTML="Buscando…";
+  try {
+    const rows=await api("/api/members?q="+encodeURIComponent(q));
+    if(!rows.length){ wrap.innerHTML='<p class="empty">Sin resultados.</p>'; return; }
+    wrap.innerHTML = rows.map(s=>{
+      const data = JSON.stringify({cardnumber:s.cardnumber,firstname:s.firstname,surname:s.surname,email:s.email}).replace(/'/g,"&#39;");
+      return `<div class="recip"><span class="who">${esc(s.surname)}, ${esc(s.firstname)} <small>(${esc(s.cardnumber)})</small>${s.email?"":' <span class="noemail">sin email</span>'}</span>
+        <button class="pill" onclick='addFromSearch(${data})'>+ Agregar</button></div>`;
+    }).join("");
+  } catch(err){ wrap.innerHTML=""; msg($("panelMsg"),err.message,"error"); }
+}
+// Separa los préstamos de un socio (del reporte loans_contact) por estado y arma su contexto.
+function ctxFromContact(loans){
+  const venc=loans.filter(l=>Number(l.dias_atraso)>0);
+  const porv=loans.filter(l=>Number(l.dias_atraso)<=0);
+  return ctxVars(venc, porv, loans);
+}
+// kind: 'overdue' = socios con algún vencido · 'upcoming' = socios con algún por vencer
+async function addByStatus(kind){
+  try {
+    const rows=await api("/api/loans/contact");
+    const byCard={};
+    rows.forEach(o=>{ if(!o.cardnumber) return; (byCard[o.cardnumber]=byCard[o.cardnumber]||{info:o,loans:[]}).loans.push(o); });
+    let agregados=0;
+    Object.values(byCard).forEach(({info,loans})=>{
+      const tieneVenc=loans.some(l=>Number(l.dias_atraso)>0);
+      const tienePorV=loans.some(l=>Number(l.dias_atraso)<=0);
+      if(kind==="overdue" && !tieneVenc) return;
+      if(kind==="upcoming" && !tienePorV) return;
+      if(recipients.some(x=>x.carnet===info.cardnumber)) return;
+      recipients.push({carnet:info.cardnumber,nombre:info.firstname,apellido:info.surname,
+        email:info.email, ctx:ctxFromContact(loans)});  // vencidos Y por vencer completos
+      agregados++;
+    });
+    renderRecipients(); updatePreview();
+    if(!agregados) msg($("panelMsg"),"No hay socios nuevos para ese atajo (ya estaban agregados o no hay).","");
+  } catch(err){ msg($("panelMsg"),err.message,"error"); }
+}
+
+function updatePreview(){
+  const r=recipients[0];
+  const v=r?recipVars(r):{nombre:"Nombre",apellido:"Apellido",carnet:"0000",email:"socio@email.com"};
+  const subj=tplRender($("mailSubject").value, v);
+  const body=tplRender($("mailBody").value, v);
+  $("mailPreview").textContent = (subj?("Asunto: "+subj+"\n\n"):"") + (body||"—");
+}
+function insertVar(v){
+  const t=$("mailBody"); const a=t.selectionStart??t.value.length, b=t.selectionEnd??a;
+  t.value=t.value.slice(0,a)+`{{${v}}}`+t.value.slice(b); updatePreview(); t.focus(); t.selectionStart=t.selectionEnd=a+v.length+4;
+}
+
+// Modal de personalización individual
+function showModal(title, subject, body, onSave){
+  const bg=document.createElement("div"); bg.className="modal-bg";
+  bg.innerHTML=`<div class="modal"><h3>${title}</h3>
+    <label>Asunto</label><input id="mSubj" />
+    <label>Cuerpo</label><textarea id="mBody" rows="9"></textarea>
+    <div class="row-btns"><button class="btn-sec" id="mCancel">Cancelar</button>
+      <button class="primary" style="width:auto;margin:0" id="mSave">Guardar</button></div></div>`;
+  document.body.appendChild(bg);
+  bg.querySelector("#mSubj").value=subject; bg.querySelector("#mBody").value=body;
+  bg.querySelector("#mCancel").onclick=()=>bg.remove();
+  bg.querySelector("#mSave").onclick=()=>{ onSave(bg.querySelector("#mSubj").value, bg.querySelector("#mBody").value); bg.remove(); };
+  bg.onclick=(e)=>{ if(e.target===bg) bg.remove(); };
+}
+window.personalizar=function(carnet){
+  const r=recipients.find(x=>x.carnet===carnet); if(!r) return;
+  const v=recipVars(r);
+  const subj = r.subjectOverride!=null ? r.subjectOverride : tplRender($("mailSubject").value, v);
+  const body = r.bodyOverride!=null ? r.bodyOverride : tplRender($("mailBody").value, v);
+  showModal(`Personalizar — ${esc(r.nombre)} ${esc(r.apellido)}`, subj, body, (s,b)=>{
+    r.subjectOverride=s; r.bodyOverride=b; renderRecipients();
+  });
+};
+
+async function mailSend(){
+  if(!recipients.length){ msg($("panelMsg"),"Agregá al menos un destinatario.","error"); return; }
+  const subject=$("mailSubject").value.trim(), body=$("mailBody").value.trim();
+  if(!subject||!body){ $("mailResult").innerHTML='<div class="msg error">Completá asunto y cuerpo.</div>'; return; }
+  const mode=document.querySelector('input[name="mailMode"]:checked').value;
+  let test_to=null;
+  if(mode==="test"){
+    test_to=$("mailTestTo").value.trim();
+    if(!test_to){ msg($("panelMsg"),"Indicá la dirección de prueba.","error"); return; }
+  } else {
+    if(!confirm(`Vas a ENVIAR de verdad a ${recipients.filter(r=>r.email).length} socios. ¿Confirmás?`)) return;
+  }
+  const payload={ subject, body, dry_run:false, test_to,
+    recipients: recipients.map(r=>({ email:r.email||null, vars:recipVars(r),
+      subject:r.subjectOverride??null, body:r.bodyOverride??null })) };
+  const btn=$("mailSendBtn"); const lbl=btn.textContent; btn.disabled=true; btn.textContent="Procesando…"; $("mailResult").innerHTML="";
+  try {
+    const res=await api("/api/mail/send",{method:"POST",body:JSON.stringify(payload)});
+    const modo = res.test_to ? `PRUEBA → todo a ${esc(res.test_to)}` : "ENVÍO REAL a socios";
+    const fall=res.resultados.filter(x=>x.status==="error"||x.status==="skipped");
+    let html=`<div class="msg" style="background:#e3f5ec;color:#137a52;border:1px solid #bfe6d3"><b>${modo}</b>: ${res.enviados}/${res.total} enviados.</div>`;
+    if(fall.length) html+=`<div class="meta">Omitidos/errores (${fall.length}): `+fall.map(e=>`${esc(e.email)} — ${esc(e.detail||e.status)}`).join("; ")+`</div>`;
+    $("mailResult").innerHTML=html;
+  } catch(err){ $("mailResult").innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+  finally { btn.disabled=false; btn.textContent=lbl; }
+}
+
+$("mailSearchBtn").addEventListener("click", mailDoSearch);
+$("mailSearch").addEventListener("keydown",e=>{ if(e.key==="Enter") mailDoSearch(); });
+$("addOverdue").addEventListener("click", ()=>addByStatus("overdue"));
+$("addUpcoming").addEventListener("click", ()=>addByStatus("upcoming"));
+$("mailSubject").addEventListener("input", updatePreview);
+$("mailBody").addEventListener("input", updatePreview);
+$("mailSendBtn").addEventListener("click", mailSend);
+document.querySelectorAll('input[name="mailMode"]').forEach(r=>r.addEventListener("change",()=>{
+  const mode=document.querySelector('input[name="mailMode"]:checked').value;
+  $("mailSendBtn").textContent = mode==="test" ? "Enviar prueba" : "Enviar a socios";
+  $("mailTestTo").disabled = mode!=="test";
+}));
+document.querySelectorAll(".vars code").forEach(c=>c.addEventListener("click",()=>insertVar(c.dataset.v)));
+
+// ── Automáticos ───────────────────────────────────────────────────────────
+function lastRunText(d){ return d ? ("Última ejecución automática: "+d) : "Todavía no se ejecutó automáticamente."; }
+async function loadAuto(){
+  try {
+    const c=await api("/api/auto/config");
+    const ri=c.resumen_interno, rs=c.recordatorio_socios, lr=c._last_run||{};
+    $("ri_enabled").checked=!!ri.enabled; $("ri_to").value=ri.to||""; $("ri_cada").value=ri.cada_dias;
+    $("ri_antes").value=ri.dias_antes; $("ri_subject").value=ri.subject||""; $("ri_body").value=ri.body||""; $("ri_footer").value=ri.footer||"";
+    $("ri_lastrun").textContent=lastRunText(lr.resumen_interno);
+    $("rs_enabled").checked=!!rs.enabled; $("rs_cada").value=rs.cada_dias; $("rs_antes").value=rs.dias_antes;
+    $("rs_umbral").value=rs.umbral_atraso; $("rs_incv").checked=!!rs.incluir_vencidos; $("rs_incp").checked=!!rs.incluir_por_vencer;
+    $("rs_subject").value=rs.subject||""; $("rs_body").value=rs.body||""; $("rs_footer").value=rs.footer||"";
+    $("rs_lastrun").textContent=lastRunText(lr.recordatorio_socios);
+  } catch(err){ msg($("panelMsg"),err.message,"error"); }
+}
+function autoPartial(job){
+  if(job==="resumen_interno") return { resumen_interno:{ enabled:$("ri_enabled").checked, to:$("ri_to").value.trim(),
+    cada_dias:+$("ri_cada").value||1, dias_antes:+$("ri_antes").value||0,
+    subject:$("ri_subject").value, body:$("ri_body").value, footer:$("ri_footer").value } };
+  return { recordatorio_socios:{ enabled:$("rs_enabled").checked, cada_dias:+$("rs_cada").value||1,
+    dias_antes:+$("rs_antes").value||0, umbral_atraso:+$("rs_umbral").value||0,
+    incluir_vencidos:$("rs_incv").checked, incluir_por_vencer:$("rs_incp").checked,
+    subject:$("rs_subject").value, body:$("rs_body").value, footer:$("rs_footer").value } };
+}
+const autoRes=(job)=>$(job==="resumen_interno"?"ri_result":"rs_result");
+const okMsg=(t)=>`<div class="msg" style="background:#e3f5ec;color:#137a52;border:1px solid #bfe6d3">${t}</div>`;
+async function saveAuto(job, silent){
+  try { await api("/api/auto/config",{method:"PUT",body:JSON.stringify(autoPartial(job))});
+    if(!silent) autoRes(job).innerHTML=okMsg("Configuración guardada."); }
+  catch(err){ if(!silent) autoRes(job).innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
+async function previewAuto(job){
+  const res=autoRes(job); res.innerHTML="Calculando…";
+  await saveAuto(job, true);
+  try {
+    const d=await api("/api/auto/preview/"+job);
+    if(job==="resumen_interno"){
+      res.innerHTML=`<div class="meta">Destino: <b>${esc(d.to||"(remitente)")}</b> · vencidos: ${d.stats.vencidos} · por vencer: ${d.stats.por_vencer} · socios que deben: ${d.stats.socios_deben}</div>
+        <div class="preview"><b>Asunto:</b> ${esc(d.subject)}\n\n${esc(d.body)}</div>`;
+    } else {
+      const s=d.sample;
+      res.innerHTML=`<div class="meta">Socios a notificar: <b>${d.total}</b> · con email: ${d.con_email} · sin email: ${d.sin_email}</div>`+
+        (s?`<div class="preview"><b>Ejemplo (${esc(s.email||"sin email")}) — Asunto:</b> ${esc(s.subject)}\n\n${esc(s.body)}</div>`
+           :'<p class="empty">Ningún socio cumple los criterios ahora.</p>');
+    }
+  } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
+async function runAuto(job, real){
+  const res=autoRes(job);
+  let test_to=null;
+  if(!real){ test_to=prompt("Dirección para la prueba (se manda TODO a ese correo):",""); if(!test_to) return; }
+  else if(!confirm("Vas a ENVIAR de verdad ahora a los destinatarios reales. ¿Confirmás?")) return;
+  await saveAuto(job, true);
+  res.innerHTML="Enviando…";
+  try {
+    const d=await api("/api/auto/run/"+job,{method:"POST",body:JSON.stringify({test_to})});
+    const r=d.result||{};
+    let txt;
+    if(job==="resumen_interno") txt=(test_to?`Prueba enviada a ${esc(test_to)}.`:`Enviado a ${esc(d.sent_to)}.`)+` (${r.enviados||0} envío/s)`;
+    else { const st=d.stats||{}; txt=(test_to?`Prueba a ${esc(test_to)}. `:"")+`Socios: ${st.socios}, con email: ${st.con_email}, sin email: ${st.sin_email}. Enviados: ${r.enviados||0}.`; }
+    res.innerHTML=okMsg(txt);
+  } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
+[["ri_save",()=>saveAuto("resumen_interno")],["ri_preview",()=>previewAuto("resumen_interno")],
+ ["ri_test",()=>runAuto("resumen_interno",false)],["ri_run",()=>runAuto("resumen_interno",true)],
+ ["rs_save",()=>saveAuto("recordatorio_socios")],["rs_preview",()=>previewAuto("recordatorio_socios")],
+ ["rs_test",()=>runAuto("recordatorio_socios",false)],["rs_run",()=>runAuto("recordatorio_socios",true)]
+].forEach(([id,fn])=>$(id).addEventListener("click",fn));
+
+if (token) enterApp();
+</script>
+</body>
+</html>

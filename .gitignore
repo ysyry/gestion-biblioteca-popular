@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Env / secrets
+.env
+*.env
+!.env.example
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Editores / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Datos locales (config de automáticos; en prod va a volumen/DB)
+backend/data/
+
+# Logs / sondeos
+*.log
+scripts/_probe_out*.json
