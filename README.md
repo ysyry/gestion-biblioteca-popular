@@ -1,65 +1,47 @@
-# Biblioteca App — Koha (DigiBePé)
+# Gestión de Bibliotecas Populares
 
-App para la **Biblioteca Popular Osvaldo Bayer** que toma datos del sistema Koha
-(DigiBePé) y los presenta a las bibliotecarias en una interfaz simple, sin SQL.
+Software de gestión para bibliotecas populares, en desarrollo. Actualmente enfocado
+en la **Biblioteca Popular Osvaldo Bayer** (Villa La Angostura, Neuquén).
 
-POC inicial: **préstamos / vencimientos** y **socios**. Solo lectura.
+Se conecta al sistema **Koha (DigiBePé)** y ofrece una interfaz simple para consultar
+préstamos y socios, enviar correos y programar avisos automáticos, sin necesidad de
+escribir SQL. Acceso de solo lectura sobre Koha.
 
-## Arquitectura
+## Características
 
-```
-Frontend (React + Vite + TS + Mantine)
-        │  HTTP/JSON
-        ▼
-Backend (FastAPI + httpx)  ──►  Koha (svc/report, JSON)
-        │                         login de staff + reportes SQL guardados
-        └─ login propio de la app (las bibliotecarias NO usan credenciales de Koha)
-```
+- **Préstamos** — vigentes y vencidos, con búsqueda y ordenamiento.
+- **Socios** — búsqueda y ficha con préstamos vigentes e historial.
+- **Correos** — envío a socios seleccionados, con plantillas y variables
+  (nombre, libros vencidos / por vencer, etc.).
+- **Avisos automáticos** — resumen periódico interno y recordatorios a los socios,
+  configurables.
 
-- **Koha es viejo (3.x): no tiene API REST.** Accedemos vía reportes SQL guardados,
-  que se consumen como JSON desde `/cgi-bin/koha/svc/report?id=N`.
-- Los reportes SQL se crean **una sola vez** en la intranet de Koha (ver `backend/sql/`).
-  La app los invoca con parámetros; la bibliotecaria nunca ve SQL.
-- **Solo lectura**: `svc/report` solo ejecuta `SELECT`. La app no puede modificar Koha.
+## Tecnología
 
-## Estado / pasos
+- **Backend:** FastAPI (Python).
+- **Frontend:** página única (HTML/CSS/JS) servida por el mismo backend.
+- **Datos:** Koha 3.x (sin API REST) vía reportes SQL guardados, exportados como TSV.
+- **Autenticación:** cada integrante del equipo ingresa con sus credenciales de Koha.
 
-- [x] Diagnóstico: `svc/report` existe (HTTP 500 sin `id`); sin REST API; sin ILS-DI.
-- [x] Backend FastAPI + auth contra Koha + endpoints (loans/members) + frontend POC.
-- [x] Login verificado end-to-end contra el Koha real (rechaza credenciales falsas).
-- [ ] **Paso pendiente A — Crear los 4 reportes SQL en la intranet** (`backend/sql/`) y
-      cargar sus IDs en `backend/.env`. ← **lo necesito de vos**
-- [ ] **Paso pendiente B — Probar con credenciales reales** (`scripts/probe_koha.py`)
-      para confirmar el formato del JSON y, si hace falta, ajustar el mapeo.
-- [ ] Producción — migrar frontend a React + Mantine y empaquetar con Docker Compose.
-
-> El POC ya corre: con los 4 reportes creados y sus IDs en `.env`, devuelve datos reales.
-
-## Backend — cómo correr
+## Desarrollo local
 
 ```bash
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # completá credenciales y IDs de reportes
-```
-
-### Sondeo (Paso 1 — hacer esto primero)
-
-Antes de construir nada encima, verificamos el formato real del JSON de tu Koha:
-
-```bash
-# 1) Crear UN reporte de prueba en la intranet (ej: el de socios) y anotar su id
-# 2) Completar KOHA_* en .env
-python scripts/probe_koha.py <ID_DEL_REPORTE>
-```
-
-El script loguea a Koha, ejecuta el reporte y muestra la respuesta cruda + el
-formato detectado (filas como arrays u objetos). Con eso afinamos el mapeo.
-
-### Levantar la API
-
-```bash
+cp .env.example .env          # completar credenciales e IDs de reportes
 uvicorn app.main:app --reload --port 8000
-# docs interactivas: http://localhost:8000/docs
 ```
+
+App en `http://localhost:8000` · documentación de la API en `/docs`.
+
+Los reportes SQL se crean una vez en Koha con `python scripts/setup_reports.py`
+(ver `backend/sql/`).
+
+## Deploy
+
+Pensado para correr con Docker. Ver [`DEPLOY.md`](DEPLOY.md).
+
+## Licencia
+
+[MIT](LICENSE).
