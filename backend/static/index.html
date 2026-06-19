@@ -142,6 +142,25 @@
   .meta { color:var(--muted); font-size:.82rem; margin-top:.7rem; }
   .empty { color:var(--muted); font-size:.86rem; font-style:italic; }
 
+  /* Loader: libro que pasa páginas con letras que vuelan */
+  .bookloader { display:flex; flex-direction:column; align-items:center; gap:1rem; padding:2.6rem 0; color:var(--muted); font-size:.85rem; }
+  .book { position:relative; width:58px; height:44px; perspective:240px; }
+  .book::before, .book::after { content:""; position:absolute; top:0; height:100%; width:50%; background:var(--navy); }
+  .book::before { left:0; border-radius:4px 0 0 4px; }
+  .book::after { right:0; border-radius:0 4px 4px 0; }
+  .book .page { position:absolute; top:3px; left:50%; width:calc(50% - 3px); height:calc(100% - 6px);
+    background:#fff; border-radius:0 3px 3px 0; transform-origin:left center; backface-visibility:hidden;
+    box-shadow:1px 0 2px rgba(0,0,0,.12); animation:pageflip 1.8s infinite ease-in-out; }
+  .book .page:nth-child(2){ animation-delay:.45s }
+  .book .page:nth-child(3){ animation-delay:.9s }
+  @keyframes pageflip { 0%{ transform:rotateY(0deg) } 50%,100%{ transform:rotateY(-168deg) } }
+  .book .fly { position:absolute; top:-2px; left:48%; font-size:.72rem; font-weight:700; opacity:0;
+    pointer-events:none; animation:fly 1.8s infinite ease-in; }
+  .book .fly.f1 { color:var(--orange); animation-delay:.2s }
+  .book .fly.f2 { color:var(--magenta); left:60%; animation-delay:.85s }
+  .book .fly.f3 { color:var(--yellow); left:40%; animation-delay:1.35s }
+  @keyframes fly { 0%{ opacity:0; transform:translateY(2px) scale(.5) } 25%{ opacity:1 } 100%{ opacity:0; transform:translateY(-22px) scale(1.05) } }
+
   /* ── Ficha del socio ───────────────────────────────────────────────────── */
   .ficha-head { border-bottom:3px solid var(--yellow); padding-bottom:1rem; margin-bottom:.6rem; }
   .ficha-head h2 { margin:0 0 .3rem; color:var(--navy); font-size:1.4rem; }
@@ -179,7 +198,11 @@
           font-size:.85rem; white-space:pre-wrap; margin-top:.5rem; line-height:1.5; }
   .opt { display:flex; align-items:center; gap:.5rem; font-size:.88rem; margin:.55rem 0; font-weight:400; color:var(--ink); }
   .opt input[type=radio], .opt input[type=checkbox] { margin:0; flex:0 0 auto; }
-  .test-addr { display:block; width:100%; max-width:280px; margin:.1rem 0 .7rem 1.7rem; }
+  /* Opciones de envío (bloque simple, alineado a la izquierda) */
+  .send-opt { display:block; padding:.4rem 0; font-size:.9rem; cursor:pointer; color:var(--ink); }
+  .send-opt input[type=radio] { margin:0 .55rem 0 0; vertical-align:middle; }
+  .test-addr { display:block; width:100%; max-width:300px; margin:.15rem 0 .8rem 1.75rem; }
+  .send-btn.primary { width:auto; min-width:170px; margin-top:.7rem; }
   /* Modal personalizar */
   .modal-bg { position:fixed; inset:0; background:rgba(19,35,91,.45); display:flex; align-items:center;
           justify-content:center; z-index:50; }
@@ -317,10 +340,10 @@
             <div id="mailPreview" class="preview">—</div>
 
             <h3 style="margin-top:1.3rem">3 · Envío</h3>
-            <label class="opt"><input type="radio" name="mailMode" value="test" checked /><span>Enviar una prueba a una dirección</span></label>
+            <label class="send-opt"><input type="radio" name="mailMode" value="test" checked />Enviar una prueba a una dirección</label>
             <input type="text" id="mailTestTo" class="test-addr" placeholder="tu@email.com" />
-            <label class="opt"><input type="radio" name="mailMode" value="real" /><span>Enviar de verdad a los socios</span></label>
-            <button class="primary" id="mailSendBtn">Enviar prueba</button>
+            <label class="send-opt"><input type="radio" name="mailMode" value="real" />Enviar de verdad a los socios</label>
+            <button class="primary send-btn" id="mailSendBtn">Enviar prueba</button>
             <div id="mailResult" style="margin-top:.8rem"></div>
           </div>
         </div>
@@ -416,6 +439,7 @@ async function api(path, opts = {}) {
   return data;
 }
 const $ = (id)=>document.getElementById(id);
+const LOADER = '<div class="bookloader"><div class="book"><div class="page"></div><div class="page"></div><div class="page"></div><span class="fly f1">A</span><span class="fly f2">a</span><span class="fly f3">✦</span></div><span>Cargando…</span></div>';
 function show(el,on){ el.classList.toggle("hide",!on); }
 function msg(el,t,k){ el.innerHTML = t ? `<div class="msg ${k}">${t}</div>` : ""; }
 function money(v){ const n=Number(v); if(Number.isNaN(n)) return v??""; return "$"+n.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -471,7 +495,7 @@ async function selectLoanView(sub){
   document.querySelectorAll("#loansSubtabs button").forEach(b=>b.classList.toggle("active",b.dataset.sub===sub));
   $("listFilterInput").value="";
   if(!loansAll){
-    $("tableWrap").innerHTML="Cargando…";
+    $("tableWrap").innerHTML=LOADER;
     try { loansAll=await api("/api/loans/contact"); }
     catch(err){ $("tableWrap").innerHTML=""; msg($("panelMsg"),err.message,"error"); return; }
   }
@@ -504,7 +528,7 @@ const MEMBER_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","fir
 let loadedRows=[], loadedCols=[], loadedClickable=false;
 let sortKey=null, sortDir=1;  // dir: 1 asc, -1 desc
 async function load(path, cols, clickable=false){
-  const wrap=$("tableWrap"); wrap.innerHTML="Cargando…";
+  const wrap=$("tableWrap"); wrap.innerHTML=LOADER;
   try {
     loadedRows=await api(path); loadedCols=cols; loadedClickable=clickable;
     applyListFilter();
@@ -547,7 +571,7 @@ function renderTable(wrap, cols, rows, clickable){
 // ── Ficha del socio ──
 async function openFicha(card){
   show($("listView"),false); show($("fichaView"),true);
-  $("fichaView").innerHTML="Cargando ficha…";
+  $("fichaView").innerHTML=LOADER;
   try {
     const d=await api(`/api/members/${encodeURIComponent(card)}/profile`);
     renderFicha(d);
@@ -766,7 +790,7 @@ document.querySelectorAll(".vars code").forEach(c=>c.addEventListener("click",()
 
 // ── Estadísticas / Inicio ─────────────────────────────────────────────────
 async function loadStats(){
-  const el=$("statsContent"); el.innerHTML='<p class="empty">Calculando…</p>';
+  const el=$("statsContent"); el.innerHTML=LOADER;
   try {
     const s=await api("/api/stats");
     const kpi=(n,l,cls)=>`<div class="kpi ${cls||''}"><div class="n">${n}</div><div class="l">${l}</div></div>`;
