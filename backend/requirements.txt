@@ -8,3 +8,4 @@ requests>=2.32
 beautifulsoup4>=4.12
 APScheduler>=3.10
 tzdata>=2024.1
+psycopg[binary]>=3.1

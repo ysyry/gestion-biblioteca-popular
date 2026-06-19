@@ -10,22 +10,18 @@ El programador (APScheduler) chequea una vez por día y dispara según `cada_dia
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
 from datetime import date
-from pathlib import Path
 
 from . import mail
+from . import storage
 from .config import settings
 from .koha.client import KohaClient
 from .koha.reports import KohaRepository
 
 logger = logging.getLogger("auto_mail")
 
-# Ruta de datos configurable (en Railway se apunta a un volumen persistente con APP_DATA_DIR).
-DATA_DIR = Path(os.getenv("APP_DATA_DIR") or (Path(__file__).resolve().parent.parent / "data"))
-CONFIG_FILE = DATA_DIR / "auto_config.json"
+CONFIG_KEY = "auto_mail"  # clave en el almacenamiento (Postgres o archivo)
 
 JOBS = ("resumen_interno", "recordatorio_socios")
 
@@ -62,12 +58,7 @@ DEFAULTS = {
 
 # ── Config ──────────────────────────────────────────────────────────────────
 def load_config() -> dict:
-    data = {}
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
+    data = storage.get(CONFIG_KEY) or {}
     cfg = {job: {**DEFAULTS[job], **(data.get(job) or {})} for job in JOBS}
     cfg["_last_run"] = data.get("_last_run") or {job: None for job in JOBS}
     return cfg
@@ -78,19 +69,14 @@ def save_config(partial: dict) -> dict:
     for job in JOBS:
         if isinstance(partial.get(job), dict):
             cfg[job] = {**cfg[job], **partial[job]}
-    _write(cfg)
+    storage.set(CONFIG_KEY, cfg)
     return cfg
-
-
-def _write(cfg: dict) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _mark_run(job: str, when: str) -> None:
     cfg = load_config()
     cfg["_last_run"][job] = when
-    _write(cfg)
+    storage.set(CONFIG_KEY, cfg)
 
 
 # ── Datos (Koha, con credenciales de servicio) ──────────────────────────────
