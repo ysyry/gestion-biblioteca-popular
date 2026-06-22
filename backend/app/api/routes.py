@@ -18,6 +18,7 @@ from ..auth import (
 from .. import mail
 from .. import auto_mail
 from .. import agenda
+from .. import cuotas
 from ..config import settings
 from ..koha.client import KohaError
 from ..koha.reports import KohaRepository
@@ -403,6 +404,24 @@ async def agenda_events(
         raise HTTPException(status_code=502, detail=f"No se pudo leer el calendario: {exc}") from exc
     return {"configured": True, "desde": d1.isoformat(), "hasta": d2.isoformat(),
             "calendarios": agenda.calendars(), "events": evs}
+
+
+# ── Cuotas societarias (planilla de Google, solo lectura) ──────────────────────
+@router.get("/cuotas", tags=["cuotas"])
+async def cuotas_estado(
+    anio: int = Query(None, description="Año (por defecto el más reciente)"),
+    _: str = Depends(get_current_username),
+):
+    """Estado de cuotas de todos los socios para un año."""
+    if not cuotas.configured():
+        return {"configured": False}
+    import asyncio
+    try:
+        data = await asyncio.to_thread(cuotas.estado_cuotas, anio or max(cuotas.anios_disponibles()))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"No se pudo leer la planilla: {exc}") from exc
+    data["configured"] = True
+    return data
 
 
 # ── Envíos automáticos ─────────────────────────────────────────────────────────

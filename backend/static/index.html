@@ -178,6 +178,22 @@
     border-radius:7px; padding:.22rem .5rem; white-space:nowrap; }
   .wgt-ev .wt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+  /* Cuotas */
+  .cuotas-toolbar { display:flex; flex-wrap:wrap; gap:.7rem 1rem; align-items:center; margin-bottom:1.1rem; }
+  .cuotas-toolbar .grow { flex:1; min-width:160px; }
+  .cuotas-table { width:100%; border-collapse:collapse; font-size:.84rem; }
+  .cuotas-table th, .cuotas-table td { padding:.4rem .45rem; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  .cuotas-table th { color:var(--muted); font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; font-weight:600; }
+  .cuotas-table th.mes, .cuotas-table td.mes { text-align:center; padding:.4rem .15rem; }
+  .mcell { display:inline-block; width:18px; height:18px; line-height:18px; border-radius:5px; font-size:.62rem; font-weight:700; text-align:center; }
+  .mcell.pago { background:#dff3e8; color:var(--green); }
+  .mcell.debe { background:#fbe2e7; color:var(--red); }
+  .mcell.na { background:#eef0f3; color:#b7bcc6; }
+  .mcell.fut { background:#f6f7f9; color:#d2d6dd; }
+  .cuotas-table tr.deuda td.nm { font-weight:600; }
+  .badge.deuda { background:#fbe2e7; color:var(--red); }
+  .badge.aldia { background:#dff3e8; color:var(--green); }
+
   /* Sub-tabs (control segmentado) */
   .subtabs { display:inline-flex; background:#eef0f3; border-radius:11px; padding:.25rem; margin-bottom:1.1rem; gap:.2rem; }
   .subtabs button { border:none; background:transparent; padding:.42rem 1.3rem; border-radius:8px; cursor:pointer;
@@ -381,6 +397,7 @@
         <button data-tab="estrategia">Estrategia</button>
         <button data-tab="loans">Préstamos</button>
         <button data-tab="members">Socios</button>
+        <button data-tab="cuotas">Cuotas</button>
         <button data-tab="agenda">Agenda</button>
         <button data-tab="mails">Mails</button>
         <button data-tab="auto">Automáticos</button>
@@ -408,6 +425,11 @@
       <!-- Agenda -->
       <div id="agendaView" class="hide">
         <div id="agendaContent"></div>
+      </div>
+
+      <!-- Cuotas -->
+      <div id="cuotasView" class="hide">
+        <div id="cuotasContent"></div>
       </div>
 
       <!-- Vista de listado -->
@@ -563,7 +585,7 @@
 <script>
 let token = localStorage.getItem("token") || "";
 let currentTab = "active";
-const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", agenda:"Agenda de actividades", mails:"Envío de mails", auto:"Envíos automáticos" };
+const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", cuotas:"Cuotas societarias", agenda:"Agenda de actividades", mails:"Envío de mails", auto:"Envíos automáticos" };
 let loanSub = "todos";
 let loansAll = null;  // cache de loans_contact mientras se está en la pestaña Préstamos
 
@@ -612,9 +634,10 @@ function selectTab(tab){
   show($("statsView"), tab==="stats");
   show($("estrategiaView"), tab==="estrategia");
   show($("agendaView"), tab==="agenda");
+  show($("cuotasView"), tab==="cuotas");
   show($("mailsView"), tab==="mails");
   show($("autoView"), tab==="auto");
-  show($("listView"), tab!=="mails" && tab!=="auto" && tab!=="stats" && tab!=="estrategia" && tab!=="agenda");
+  show($("listView"), tab!=="mails" && tab!=="auto" && tab!=="stats" && tab!=="estrategia" && tab!=="agenda" && tab!=="cuotas");
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
   show($("listFilter"), tab==="loans");
@@ -623,6 +646,7 @@ function selectTab(tab){
   if (tab==="stats") loadStats();
   else if (tab==="estrategia") loadEstrategia();
   else if (tab==="agenda") loadAgenda();
+  else if (tab==="cuotas") loadCuotas();
   else if (tab==="loans") { loansAll=null; selectLoanView(loanSub); }
   else if (tab==="members") { $("tableWrap").innerHTML = '<p class="empty">Buscá un socio por apellido, nombre o carnet.</p>'; }
   else if (tab==="mails") { renderRecipients(); updatePreview(); }
@@ -1226,6 +1250,115 @@ async function renderAgendaWidget(){
       return `<div class="wgt-ev"><span class="chip" style="background:${esc(e.color)}22;color:${esc(e.color)}">${p.dia} ${esc(p.mes)}${e.todo_el_dia?"":" · "+esc(p.hora)}</span><span class="wt">${esc(e.titulo)}</span></div>`; }).join("");
     box.innerHTML=`<h3>Próximas actividades</h3>${items}`;
   } catch(err){ box.remove(); }
+}
+
+// ── Cuotas societarias ────────────────────────────────────────────────────
+const CU_PAGE=25;
+let cuotasData=null, cuotasAnio=null, cuotasFiltro={q:"", solo:"todos", page:0};
+let cuSort={key:null, dir:1};
+async function loadCuotas(anio){
+  const el=$("cuotasContent"); el.innerHTML=LOADER;
+  try {
+    const url = anio ? `/api/cuotas?anio=${anio}` : "/api/cuotas";
+    const d=await api(url);
+    if(!d.configured){ el.innerHTML=cuotasNoConfig(); return; }
+    cuotasData=d; cuotasAnio=d.anio; cuotasFiltro.page=0;
+    renderCuotas();
+  } catch(err){ el.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
+function cuotasNoConfig(){
+  return `<div class="card"><h3>Conectá la planilla de pagos</h3>
+    <p class="meta">Falta configurar la credencial de Google (cuenta de servicio) y el id de la planilla. Avisá y lo cargamos.</p></div>`;
+}
+function mcell(m){
+  if(m.estado==='pago') return `<span class="mcell pago" title="${m.mes}: pagó">P</span>`;
+  if(m.estado==='na')   return `<span class="mcell na" title="${m.mes}: no corresponde">–</span>`;
+  if(!m.vencido)        return `<span class="mcell fut" title="${m.mes}: no vencido"></span>`;
+  return `<span class="mcell debe" title="${m.mes}: debe">·</span>`;
+}
+function cuSortVal(s){
+  switch(cuSort.key){
+    case 'socio': return (s.apellido+" "+s.nombre).toLowerCase();
+    case 'matricula': return Number(s.matricula)||s.matricula;
+    case 'categoria': return (s.categoria||"").toLowerCase();
+    case 'estado': return s.estado==='debe'? s.debe : -1; // al día primero al asc
+    default: return 0;
+  }
+}
+function cuotasFiltradas(){
+  let socios=cuotasData.socios;
+  const q=cuotasFiltro.q.trim().toLowerCase();
+  if(q) socios=socios.filter(s=>(s.apellido+" "+s.nombre+" "+s.matricula).toLowerCase().includes(q));
+  if(cuotasFiltro.solo==='deuda') socios=socios.filter(s=>s.estado==='debe');
+  else if(cuotasFiltro.solo==='aldia') socios=socios.filter(s=>s.estado==='al_dia');
+  if(cuSort.key){
+    socios=socios.slice().sort((a,b)=>{ const x=cuSortVal(a),y=cuSortVal(b);
+      return (x<y?-1:x>y?1:0)*cuSort.dir; });
+  }
+  return socios;
+}
+function cuToggleSort(key){
+  if(cuSort.key===key) cuSort.dir=-cuSort.dir; else { cuSort.key=key; cuSort.dir=1; }
+  cuotasFiltro.page=0; renderCuotas();
+}
+function cuTh(key,label,cls){
+  const ind = cuSort.key===key ? (cuSort.dir>0?' ↑':' ↓') : '';
+  return `<th class="sortable ${cls||''}" data-cu="${key}">${label}${ind}</th>`;
+}
+function cuotasFila(s){
+  return `<tr class="${s.estado==='debe'?'deuda':''}">
+    <td class="nm">${esc(s.apellido)}, ${esc(s.nombre)}</td><td>${esc(s.matricula)}</td><td>${esc(s.categoria)}</td>
+    ${s.meses.map(m=>`<td class="mes">${mcell(m)}</td>`).join("")}
+    <td>${s.estado==='debe'?`<span class="badge deuda">debe ${s.debe}</span>`:'<span class="badge aldia">al día</span>'}</td></tr>`;
+}
+function renderCuotas(){
+  const d=cuotasData;
+  const aniosSel=d.anios.map(a=>`<option value="${a}" ${a===cuotasAnio?'selected':''}>${a}</option>`).join("");
+  const mesesTh = d.por_mes.map(m=>`<th class="mes">${m.label[0]}</th>`).join("");
+  $("cuotasContent").innerHTML=`
+    <div class="kpi-grid">
+      ${statKpi(miles(d.total),"Socios en la planilla")}
+      ${statKpi(miles(d.al_dia),d.pct_al_dia+"% al día","ok")}
+      ${statKpi(miles(d.en_deuda),"En deuda","warn")}
+    </div>
+    <div class="cuotas-toolbar">
+      <label class="meta">Año:&nbsp;<select id="cuAnio">${aniosSel}</select></label>
+      <div class="subtabs" id="cuFiltro">
+        <button data-f="todos" class="${cuotasFiltro.solo==='todos'?'active':''}">Todos</button>
+        <button data-f="deuda" class="${cuotasFiltro.solo==='deuda'?'active':''}">En deuda</button>
+        <button data-f="aldia" class="${cuotasFiltro.solo==='aldia'?'active':''}">Al día</button>
+      </div>
+      <input id="cuBuscar" class="grow" placeholder="Buscar por nombre o matrícula…" value="${esc(cuotasFiltro.q)}" />
+    </div>
+    <div class="card" style="overflow-x:auto">
+      <table class="cuotas-table">
+        <thead><tr>${cuTh('socio','Socio')}${cuTh('matricula','Matríc.')}${cuTh('categoria','Categoría')}${mesesTh}${cuTh('estado','Estado')}</tr></thead>
+        <tbody id="cuBody"></tbody>
+      </table>
+      <div class="ag-toolbar" style="margin:.7rem 0 0; justify-content:space-between">
+        <div class="meta"><span class="mcell pago" style="vertical-align:middle">P</span> pagó · <span class="mcell debe" style="vertical-align:middle">·</span> debe · <span class="mcell na" style="vertical-align:middle">–</span> no corresponde</div>
+        <div class="ag-nav"><button id="cuPrev">‹</button><span class="meta" id="cuInfo"></span><button id="cuNext">›</button></div>
+      </div>
+    </div>`;
+  $("cuAnio").onchange=(e)=>loadCuotas(+e.target.value);
+  $("cuBuscar").oninput=(e)=>{ cuotasFiltro.q=e.target.value; cuotasFiltro.page=0; renderCuotasPage(); };
+  document.querySelectorAll("#cuFiltro button").forEach(b=>b.onclick=()=>{ cuotasFiltro.solo=b.dataset.f; cuotasFiltro.page=0; renderCuotas(); });
+  document.querySelectorAll(".cuotas-table th.sortable").forEach(th=>th.onclick=()=>cuToggleSort(th.dataset.cu));
+  $("cuPrev").onclick=()=>{ if(cuotasFiltro.page>0){ cuotasFiltro.page--; renderCuotasPage(); } };
+  $("cuNext").onclick=()=>{ const tot=cuotasFiltradas().length; if((cuotasFiltro.page+1)*CU_PAGE<tot){ cuotasFiltro.page++; renderCuotasPage(); } };
+  renderCuotasPage();
+}
+function renderCuotasPage(){
+  const socios=cuotasFiltradas();
+  const tot=socios.length, pages=Math.max(1, Math.ceil(tot/CU_PAGE));
+  if(cuotasFiltro.page>=pages) cuotasFiltro.page=pages-1;
+  const ini=cuotasFiltro.page*CU_PAGE, slice=socios.slice(ini, ini+CU_PAGE);
+  const tb=$("cuBody"); if(!tb) return;
+  tb.innerHTML = slice.length ? slice.map(cuotasFila).join("") : `<tr><td colspan="16" class="empty">Sin resultados.</td></tr>`;
+  const info=$("cuInfo"); if(info) info.textContent = tot ? `${ini+1}–${Math.min(ini+CU_PAGE,tot)} de ${tot}` : "0";
+  const prev=$("cuPrev"), next=$("cuNext");
+  if(prev) prev.disabled = cuotasFiltro.page<=0;
+  if(next) next.disabled = (cuotasFiltro.page+1)*CU_PAGE>=tot;
 }
 
 // ── Automáticos ───────────────────────────────────────────────────────────
