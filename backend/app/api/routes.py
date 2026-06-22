@@ -424,6 +424,70 @@ async def cuotas_estado(
     return data
 
 
+# ── Cruce de datos: Koha (préstamos) vs planilla (cuotas) ──────────────────────
+def _norm_id(x) -> str:
+    x = str(x or "").strip()
+    return x.lstrip("0") or x
+
+
+@router.get("/cruce", tags=["cuotas"])
+async def cruce(repo: KohaRepository = Depends(get_repository), _: str = Depends(get_current_username)):
+    """Cruza socios de Koha (actividad de préstamo) con la planilla de cuotas (matrícula=carnet)."""
+    if not cuotas.configured():
+        return {"configured": False}
+    import asyncio
+    sql = """SELECT br.cardnumber, br.surname, br.firstname, br.email,
+      (SELECT COUNT(*) FROM statistics s WHERE s.borrowernumber=br.borrowernumber
+        AND s.type='issue' AND s.datetime >= NOW() - INTERVAL 1 YEAR) AS l12
+      FROM borrowers br"""
+    koha = await repo.run_sql(sql)
+    data = await asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles()))
+
+    koha_by = {_norm_id(r["cardnumber"]): r for r in koha if r.get("cardnumber")}
+    pl_by = {_norm_id(s["matricula"]): s for s in data["socios"] if s.get("matricula")}
+    ks, ps = set(koha_by), set(pl_by)
+    inter = ks & ps
+
+    def retira(card):
+        r = koha_by.get(card)
+        try:
+            return r is not None and int(r["l12"]) > 0
+        except (TypeError, ValueError):
+            return False
+
+    def paga(m): return pl_by[m]["estado"] == "al_dia"
+
+    def info(card, s=None):
+        k = koha_by.get(card, {})
+        return {"carnet": k.get("cardnumber") or (s["matricula"] if s else ""),
+                "apellido": k.get("surname") or (s["apellido"] if s else ""),
+                "nombre": k.get("firstname") or (s["nombre"] if s else ""),
+                "email": k.get("email") or ""}
+
+    deudores_retiran = [info(m, pl_by[m]) for m in inter if not paga(m) and retira(m)]
+    pagan_no_retiran = [info(m, pl_by[m]) for m in inter if paga(m) and not retira(m)]
+    retiran_sin_planilla = [info(k) for k in (ks - ps) if retira(k)]
+
+    return {
+        "configured": True,
+        "anio": data["anio"],
+        "koha_total": len(koha_by),
+        "planilla_total": len(pl_by),
+        "coinciden": len(inter),
+        "solo_koha": len(ks - ps),
+        "solo_planilla": len(ps - ks),
+        "cuadrantes": {
+            "paga_retira": sum(1 for m in inter if paga(m) and retira(m)),
+            "paga_no_retira": len(pagan_no_retiran),
+            "no_paga_retira": len(deudores_retiran),
+            "no_paga_no_retira": sum(1 for m in inter if not paga(m) and not retira(m)),
+        },
+        "deudores_retiran": deudores_retiran,
+        "pagan_no_retiran": pagan_no_retiran,
+        "retiran_sin_planilla": retiran_sin_planilla,
+    }
+
+
 # ── Envíos automáticos ─────────────────────────────────────────────────────────
 @router.get("/auto/config", tags=["auto"])
 async def auto_config_get(_: str = Depends(get_current_username)):

@@ -178,6 +178,21 @@
     border-radius:7px; padding:.22rem .5rem; white-space:nowrap; }
   .wgt-ev .wt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+  /* Cruce de datos (matriz 2x2) */
+  .matrix { display:grid; grid-template-columns:auto 1fr 1fr; gap:.5rem; max-width:560px; margin:.4rem 0 .2rem; }
+  .matrix .lbl { display:flex; align-items:center; justify-content:center; font-size:.74rem; font-weight:600;
+    color:var(--muted); text-transform:uppercase; letter-spacing:.03em; padding:.3rem; }
+  .matrix .cell { border-radius:11px; padding:.9rem; text-align:center; color:#fff; }
+  .matrix .cell .n { font-size:1.7rem; font-weight:700; line-height:1; }
+  .matrix .cell .c { font-size:.74rem; opacity:.92; margin-top:.25rem; }
+  .matrix .cell.good { background:#15AA6C; } .matrix .cell.warn { background:#F5821F; }
+  .matrix .cell.bad { background:#C7002A; } .matrix .cell.neutral { background:#8a8f9a; }
+  .cruce-list { margin-top:1rem; }
+  .cruce-list .chead { display:flex; justify-content:space-between; align-items:center; gap:1rem;
+    padding:.5rem 0; cursor:pointer; }
+  .cruce-list .chead b { color:var(--navy); } .cruce-list .chead .pill { white-space:nowrap; }
+  .cruce-rows { max-height:230px; overflow:auto; border-top:1px solid var(--line); }
+
   /* Cuotas */
   .cuotas-toolbar { display:flex; flex-wrap:wrap; gap:.7rem 1rem; align-items:center; margin-bottom:1.1rem; }
   .cuotas-toolbar .grow { flex:1; min-width:160px; }
@@ -433,6 +448,9 @@
       </div>
 
       <!-- Vista de listado -->
+      <!-- Cruce de datos (en la pestaña Socios) -->
+      <div id="cruceSection" class="hide"></div>
+
       <div id="listView" class="card">
         <div id="loansSubtabs" class="subtabs hide">
           <button data-sub="todos" class="active">Todos</button>
@@ -640,6 +658,7 @@ function selectTab(tab){
   show($("listView"), tab!=="mails" && tab!=="auto" && tab!=="stats" && tab!=="estrategia" && tab!=="agenda" && tab!=="cuotas");
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
+  show($("cruceSection"), tab==="members");
   show($("listFilter"), tab==="loans");
   $("listFilterInput").value="";
   msg($("panelMsg"),"",""); $("rowCount").textContent="";
@@ -648,7 +667,7 @@ function selectTab(tab){
   else if (tab==="agenda") loadAgenda();
   else if (tab==="cuotas") loadCuotas();
   else if (tab==="loans") { loansAll=null; selectLoanView(loanSub); }
-  else if (tab==="members") { $("tableWrap").innerHTML = '<p class="empty">Buscá un socio por apellido, nombre o carnet.</p>'; }
+  else if (tab==="members") { $("tableWrap").innerHTML = '<p class="empty">Buscá un socio por apellido, nombre o carnet.</p>'; loadCruce(); }
   else if (tab==="mails") { renderRecipients(); updatePreview(); }
   else if (tab==="auto") { loadAuto(); }
 }
@@ -1251,6 +1270,57 @@ async function renderAgendaWidget(){
     box.innerHTML=`<h3>Próximas actividades</h3>${items}`;
   } catch(err){ box.remove(); }
 }
+
+// ── Cruce de datos (Socios) ───────────────────────────────────────────────
+let cruceLists={};
+async function loadCruce(){
+  const el=$("cruceSection"); el.innerHTML='<div class="card">'+LOADER_SM+'</div>';
+  try {
+    const d=await api("/api/cruce");
+    if(!d.configured){ el.innerHTML=""; return; }  // sin planilla configurada: no mostramos nada
+    cruceLists={ deudores_retiran:d.deudores_retiran, pagan_no_retiran:d.pagan_no_retiran, retiran_sin_planilla:d.retiran_sin_planilla };
+    const q=d.cuadrantes;
+    const lista=(titulo,key,cls)=>{
+      const arr=cruceLists[key]||[];
+      return `<div class="cruce-list">
+        <div class="chead" onclick="this.nextElementSibling.classList.toggle('hide')">
+          <b>${titulo}</b>
+          <span><span class="pill" onclick="event.stopPropagation();cruceAMails('${key}')">+ Agregar a Mails (${arr.length})</span></span>
+        </div>
+        <div class="cruce-rows hide">${arr.map(p=>`<div class="recip"><span class="who">${esc(p.apellido)}, ${esc(p.nombre)} <small>(${esc(p.carnet)})</small>${p.email?"":' <span class="noemail">sin email</span>'}</span></div>`).join("")||'<p class="empty">—</p>'}</div>
+      </div>`;
+    };
+    el.innerHTML=`<div class="card">
+      <h3 style="margin-top:0">Cruce con la planilla de cuotas (${d.anio})</h3>
+      <p class="meta" style="margin:.1rem 0 1rem">"Retira" = sacó al menos un libro en el último año. Matrícula de la planilla = carnet de Koha.</p>
+      <div class="kpi-grid">
+        ${statKpi(miles(d.koha_total),"Socios en Koha")}
+        ${statKpi(miles(d.planilla_total),"En la planilla de cuotas")}
+        ${statKpi(miles(d.coinciden),"Coinciden (en ambos)","ok")}
+        ${statKpi(miles(d.solo_koha),"En Koha, fuera de la planilla","warn")}
+      </div>
+      <div style="font-weight:700;color:var(--navy);margin:.4rem 0 .2rem">Socios que coinciden: ¿pagan? ¿retiran?</div>
+      <div class="matrix">
+        <div class="lbl"></div><div class="lbl">Retira libros</div><div class="lbl">No retira</div>
+        <div class="lbl">Paga</div>
+        <div class="cell good"><div class="n">${q.paga_retira}</div><div class="c">paga y retira</div></div>
+        <div class="cell warn"><div class="n">${q.paga_no_retira}</div><div class="c">paga, no retira</div></div>
+        <div class="lbl">No paga</div>
+        <div class="cell bad"><div class="n">${q.no_paga_retira}</div><div class="c">retira, no paga</div></div>
+        <div class="cell neutral"><div class="n">${q.no_paga_no_retira}</div><div class="c">ni paga ni retira</div></div>
+      </div>
+      ${lista("Retiran libros y deben cuota","deudores_retiran")}
+      ${lista("Pagan pero no retiran (fieles)","pagan_no_retiran")}
+      ${lista("Retiran pero no están en la planilla","retiran_sin_planilla")}
+    </div>`;
+  } catch(err){ el.innerHTML=`<div class="card"><div class="msg error">${esc(err.message)}</div></div>`; }
+}
+window.cruceAMails=function(key){
+  const arr=cruceLists[key]||[]; let n=0;
+  arr.forEach(p=>{ if(p.email && !recipients.some(r=>r.carnet===p.carnet)){ recipients.push({carnet:p.carnet,nombre:p.nombre,apellido:p.apellido,email:p.email,ctx:null}); n++; } });
+  selectTab("mails");
+  msg($("panelMsg"), `Se agregaron ${n} destinatario(s) con email a la campaña.`, "");
+};
 
 // ── Cuotas societarias ────────────────────────────────────────────────────
 const CU_PAGE=25;
