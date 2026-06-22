@@ -149,3 +149,7 @@ class KohaRepository:
     async def loans_contact(self) -> list[dict[str, Any]]:
         """Todos los préstamos vigentes con contacto y días respecto del vencimiento."""
         return await self._run(REPORTS["loans_contact"])
+
+    async def run_sql(self, sql: str) -> list[dict[str, Any]]:
+        """Consulta SQL interna (estadísticas de catálogo). Sin entrada del usuario."""
+        return await self._client.run_sql(sql)

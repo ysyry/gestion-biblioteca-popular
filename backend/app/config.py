@@ -1,8 +1,32 @@
 """Configuración de la app, cargada desde variables de entorno / .env."""
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _load_dotenv_to_environ() -> None:
+    """Vuelca el .env (si existe) a os.environ sin pisar variables ya definidas.
+
+    Necesario para la config dinámica que se lee con os.getenv (ej. CALENDAR_*_URL).
+    En producción (Railway) no hay .env y las variables ya están en el entorno real,
+    así que setdefault no las toca.
+    """
+    p = Path(__file__).resolve().parent.parent / ".env"
+    if not p.exists():
+        return
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
+_load_dotenv_to_environ()
 
 
 class Settings(BaseSettings):

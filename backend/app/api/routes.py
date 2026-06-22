@@ -17,6 +17,7 @@ from ..auth import (
 )
 from .. import mail
 from .. import auto_mail
+from .. import agenda
 from ..config import settings
 from ..koha.client import KohaError
 from ..koha.reports import KohaRepository
@@ -126,6 +127,188 @@ async def stats(repo: KohaRepository = Depends(get_repository)):
     }
 
 
+_SQL_TOTALES = """
+SELECT
+  (SELECT COUNT(*) FROM items) AS ejemplares,
+  (SELECT COUNT(DISTINCT biblionumber) FROM items) AS titulos,
+  (SELECT COUNT(*) FROM items WHERE issues IS NULL OR issues = 0) AS sin_circular,
+  (SELECT COUNT(*) FROM items WHERE itemlost > 0) AS perdidos,
+  (SELECT COUNT(*) FROM items WHERE damaged > 0) AS danados,
+  (SELECT COUNT(*) FROM items WHERE withdrawn > 0) AS retirados
+""".strip()
+
+_SQL_TIPOS = """
+SELECT COALESCE(t.description, NULLIF(i.itype,''), '(sin tipo)') AS label, COUNT(*) AS count
+FROM items i LEFT JOIN itemtypes t ON t.itemtype = i.itype
+GROUP BY label ORDER BY count DESC LIMIT 12
+""".strip()
+
+_SQL_TOP_HIST = """
+SELECT b.title AS label, i.issues AS count
+FROM items i JOIN biblio b ON b.biblionumber = i.biblionumber
+WHERE i.issues > 0 ORDER BY i.issues DESC LIMIT 10
+""".strip()
+
+
+def _num(v) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
+@router.get("/stats/catalog", tags=["stats"])
+async def stats_catalog(repo: KohaRepository = Depends(get_repository)):
+    """KPIs del catálogo (ejemplares, títulos, circulación, tipos, colecciones)."""
+    async def q(sql):
+        try:
+            return await repo.run_sql(sql)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stats/catalog: consulta falló: %s", exc)
+            return []
+
+    totals = await q(_SQL_TOTALES)
+    tipos = await q(_SQL_TIPOS)
+    top = await q(_SQL_TOP_HIST)
+    t = totals[0] if totals else {}
+    ejemplares, titulos = _num(t.get("ejemplares")), _num(t.get("titulos"))
+    sin_circular = _num(t.get("sin_circular"))
+
+    def serie(rows):
+        return [{"label": r.get("label") or "—", "count": _num(r.get("count"))} for r in rows]
+
+    return {
+        "ejemplares": ejemplares,
+        "titulos": titulos,
+        "sin_circular": sin_circular,
+        "pct_sin_circular": round(100 * sin_circular / ejemplares, 1) if ejemplares else 0,
+        "perdidos": _num(t.get("perdidos")),
+        "danados": _num(t.get("danados")),
+        "retirados": _num(t.get("retirados")),
+        "por_tipo": serie(tipos),
+        "top_historico": serie(top),
+    }
+
+
+@router.get("/stats/historico", tags=["stats"])
+async def stats_historico(
+    desde: str | None = Query(None, description="YYYY-MM-DD"),
+    hasta: str | None = Query(None, description="YYYY-MM-DD"),
+    repo: KohaRepository = Depends(get_repository),
+):
+    """Estadísticas de circulación (tabla statistics) en un rango de fechas."""
+    import datetime as dt
+    today = dt.date.today()
+    try:
+        d2 = dt.date.fromisoformat(hasta) if hasta else today
+        d1 = dt.date.fromisoformat(desde) if desde else (d2 - dt.timedelta(days=365))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Fechas inválidas (YYYY-MM-DD).") from exc
+    if d1 > d2:
+        d1, d2 = d2, d1
+    # Fechas re-serializadas desde objetos date -> seguras para interpolar.
+    rango = f"s.datetime >= '{d1.isoformat()} 00:00:00' AND s.datetime <= '{d2.isoformat()} 23:59:59'"
+
+    async def q(sql):
+        try:
+            return await repo.run_sql(sql)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stats/historico: consulta falló: %s", exc)
+            return []
+
+    totales = await q(f"""
+        SELECT SUM(s.type='issue') AS prestamos, SUM(s.type='return') AS devoluciones,
+               SUM(s.type='renew') AS renovaciones,
+               COUNT(DISTINCT CASE WHEN s.type='issue' THEN s.borrowernumber END) AS socios_activos
+        FROM statistics s WHERE {rango}""")
+    por_mes = await q(f"""
+        SELECT DATE_FORMAT(s.datetime,'%Y-%m') AS label, COUNT(*) AS count
+        FROM statistics s WHERE s.type='issue' AND {rango}
+        GROUP BY label ORDER BY label""")
+    top_titulos = await q(f"""
+        SELECT b.title AS label, COUNT(*) AS count
+        FROM statistics s JOIN items i ON i.itemnumber=s.itemnumber
+        JOIN biblio b ON b.biblionumber=i.biblionumber
+        WHERE s.type='issue' AND {rango}
+        GROUP BY b.title ORDER BY count DESC LIMIT 10""")
+    top_socios = await q(f"""
+        SELECT CONCAT(br.surname, ', ', br.firstname) AS label, COUNT(*) AS count
+        FROM statistics s JOIN borrowers br ON br.borrowernumber=s.borrowernumber
+        WHERE s.type='issue' AND {rango}
+        GROUP BY br.borrowernumber ORDER BY count DESC LIMIT 10""")
+
+    t = totales[0] if totales else {}
+
+    def serie(rows):
+        return [{"label": r.get("label") or "—", "count": _num(r.get("count"))} for r in rows]
+
+    return {
+        "desde": d1.isoformat(), "hasta": d2.isoformat(),
+        "prestamos": _num(t.get("prestamos")),
+        "devoluciones": _num(t.get("devoluciones")),
+        "renovaciones": _num(t.get("renovaciones")),
+        "socios_activos": _num(t.get("socios_activos")),
+        "por_mes": serie(por_mes),
+        "top_titulos": serie(top_titulos),
+        "top_socios": serie(top_socios),
+    }
+
+
+@router.get("/stats/estrategia", tags=["stats"])
+async def stats_estrategia(repo: KohaRepository = Depends(get_repository)):
+    """Panel estratégico: crecimiento, socios, estacionalidad y antigüedad del acervo."""
+    async def q(sql):
+        try:
+            return await repo.run_sql(sql)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stats/estrategia: consulta falló: %s", exc)
+            return []
+
+    def serie(rows):
+        return [{"label": str(r.get("label") or "—"), "count": _num(r.get("count"))} for r in rows]
+
+    prestamos_anio = await q("""SELECT YEAR(datetime) AS label, COUNT(*) AS count
+        FROM statistics WHERE type='issue' AND datetime>='2013-01-01' GROUP BY label ORDER BY label""")
+    socios_activos_anio = await q("""SELECT YEAR(datetime) AS label, COUNT(DISTINCT borrowernumber) AS count
+        FROM statistics WHERE type='issue' AND datetime>='2013-01-01' GROUP BY label ORDER BY label""")
+    socios_nuevos_anio = await q("""SELECT YEAR(dateenrolled) AS label, COUNT(*) AS count
+        FROM borrowers WHERE dateenrolled IS NOT NULL GROUP BY label ORDER BY label""")
+    estacionalidad = await q("""SELECT MONTH(datetime) AS label, COUNT(*) AS count
+        FROM statistics WHERE type='issue' GROUP BY label ORDER BY label""")
+    acervo_anio = await q("""SELECT YEAR(dateaccessioned) AS label, COUNT(*) AS count
+        FROM items WHERE dateaccessioned IS NOT NULL AND YEAR(dateaccessioned) >= YEAR(CURDATE())-15
+        GROUP BY label ORDER BY label""")
+    socios_kpi = await q("""SELECT
+        (SELECT COUNT(*) FROM borrowers) AS total,
+        (SELECT COUNT(*) FROM borrowers b WHERE EXISTS (
+            SELECT 1 FROM statistics s WHERE s.borrowernumber=b.borrowernumber
+            AND s.type='issue' AND s.datetime >= NOW() - INTERVAL 1 YEAR)) AS activos12,
+        (SELECT COUNT(*) FROM borrowers b WHERE NOT EXISTS (
+            SELECT 1 FROM statistics s WHERE s.borrowernumber=b.borrowernumber AND s.type='issue')) AS nunca""")
+    acervo_kpi = await q("""SELECT
+        (SELECT COUNT(*) FROM items) AS total_items,
+        SUM(dateaccessioned >= CURDATE() - INTERVAL 1 YEAR) AS nuevos12,
+        SUM(dateaccessioned >= CURDATE() - INTERVAL 5 YEAR) AS ult5
+        FROM items""")
+
+    sk = socios_kpi[0] if socios_kpi else {}
+    ak = acervo_kpi[0] if acervo_kpi else {}
+    total, activos12, nunca = _num(sk.get("total")), _num(sk.get("activos12")), _num(sk.get("nunca"))
+    total_items, ult5 = _num(ak.get("total_items")), _num(ak.get("ult5"))
+
+    return {
+        "prestamos_por_anio": serie(prestamos_anio),
+        "socios_activos_por_anio": serie(socios_activos_anio),
+        "socios_nuevos_por_anio": serie(socios_nuevos_anio),
+        "estacionalidad": serie(estacionalidad),
+        "acervo_por_anio": serie(acervo_anio),
+        "socios": {"total": total, "activos_12m": activos12,
+                   "dormidos": max(total - activos12 - nunca, 0), "nunca": nunca},
+        "acervo": {"nuevos_12m": _num(ak.get("nuevos12")), "ult_5": ult5,
+                   "mas_5": max(total_items - ult5, 0)},
+    }
+
+
 # ── Socios ────────────────────────────────────────────────────────────────────
 @router.get("/members", tags=["members"])
 async def members_search(
@@ -196,6 +379,30 @@ async def mail_send(body: MailSendRequest, _: str = Depends(get_current_username
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── Agenda de actividades (Google Calendar, solo lectura) ──────────────────────
+@router.get("/agenda", tags=["agenda"])
+async def agenda_events(
+    desde: str | None = Query(None, description="YYYY-MM-DD (por defecto hoy)"),
+    dias: int = Query(90, ge=1, le=400),
+    _: str = Depends(get_current_username),
+):
+    """Eventos del calendario de la biblioteca, desde 'desde' por 'dias' días."""
+    import datetime as _dt
+    if not agenda.configured():
+        return {"configured": False, "events": []}
+    try:
+        d1 = _dt.date.fromisoformat(desde) if desde else _dt.date.today()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Fecha inválida (YYYY-MM-DD).") from exc
+    d2 = d1 + _dt.timedelta(days=dias)
+    try:
+        evs = await agenda.events(d1, d2)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"No se pudo leer el calendario: {exc}") from exc
+    return {"configured": True, "desde": d1.isoformat(), "hasta": d2.isoformat(),
+            "calendarios": agenda.calendars(), "events": evs}
 
 
 # ── Envíos automáticos ─────────────────────────────────────────────────────────

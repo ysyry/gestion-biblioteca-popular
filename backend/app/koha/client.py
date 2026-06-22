@@ -139,6 +139,24 @@ class KohaClient:
 
         return self._parse_tsv(resp.text)
 
+    async def run_sql(self, sql: str) -> list[dict]:
+        """Ejecuta un SELECT arbitrario (SQL interno de la app, sin entrada del usuario)
+        contra el export de Koha y devuelve las filas. Para estadísticas de catálogo."""
+        await self._ensure_login()
+        data = {"sql": sql, "format": "tab", "phase": "Export", "submit": "Bajar"}
+        resp = await self._client.post(RUN_PATH, data=data)
+        if LOGIN_MARKER in resp.text:
+            async with self._lock:
+                await self.login()
+            resp = await self._client.post(RUN_PATH, data=data)
+        head = resp.text[:4000]
+        if "\t" not in head and "dialog alert" in head:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            alert = soup.find(class_="dialog alert")
+            detail = alert.get_text(" ", strip=True) if alert else "error desconocido"
+            raise KohaError(f"Consulta de catálogo: {detail}")
+        return self._parse_tsv(resp.text)
+
     @staticmethod
     def _parse_tsv(text: str) -> list[dict]:
         """Parsea el export separado por tabuladores en lista de dicts (clave = encabezado)."""

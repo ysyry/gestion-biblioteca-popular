@@ -23,6 +23,11 @@ dist/
 # Datos locales (config de automáticos; en prod va a volumen/DB)
 backend/data/
 
+# Credenciales de Google (cuenta de servicio) — NUNCA al repo
+backend/credentials/
+*service-account*.json
+*.serviceaccount.json
+
 # Logs / sondeos
 *.log
 scripts/_probe_out*.json
