@@ -62,7 +62,9 @@ def _read_rows() -> list[list[str]]:
 
     kind, val = _creds_source()
     if kind == "inline":
-        creds = Credentials.from_service_account_info(json.loads(val), scopes=_SCOPES)
+        # strict=False tolera saltos de línea reales dentro de private_key
+        # (pasa cuando se pega la credencial sin minificar en las variables).
+        creds = Credentials.from_service_account_info(json.loads(val, strict=False), scopes=_SCOPES)
     elif kind == "file":
         creds = Credentials.from_service_account_file(val, scopes=_SCOPES)
     else:
