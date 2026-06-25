@@ -102,6 +102,8 @@
   .auto-test input { width:auto; flex:1; min-width:160px; max-width:280px; }
   .btn-sec.danger { color:var(--red); border-color:#f3c2cc; }
   .btn-sec.danger:hover { background:#fbe4e8; }
+  .primary.danger-btn { background:var(--red); }
+  .primary.danger-btn:hover { background:#a80022; }
   .mailmock { border:1px solid var(--line); border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(20,30,60,.06); }
   .mailmock .mm-head { background:#f7f8fa; padding:.7rem .9rem; border-bottom:1px solid var(--line); }
   .mailmock .mm-head b { color:var(--navy); }
@@ -587,6 +589,21 @@ function msg(el,t,k){ el.innerHTML = t ? `<div class="msg ${k}">${t}</div>` : ""
 function money(v){ const n=Number(v); if(Number.isNaN(n)) return v??""; return "$"+n.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fecha(v){ return v ? String(v).slice(0,10) : ""; }
 function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+// Confirmación con UI propia (reemplaza al confirm() del navegador). Devuelve Promise<bool>.
+function uiConfirm({title="Confirmar", message="", ok="Confirmar", danger=false}={}){
+  return new Promise(resolve=>{
+    const bg=document.createElement("div"); bg.className="modal-bg";
+    bg.innerHTML=`<div class="modal"><h3>${esc(title)}</h3>
+      <p style="margin:.2rem 0 0;line-height:1.5">${message}</p>
+      <div class="row-btns"><button class="btn-sec" id="ucNo">Cancelar</button>
+        <button class="primary${danger?' danger-btn':''}" style="width:auto;margin:0" id="ucYes">${esc(ok)}</button></div></div>`;
+    document.body.appendChild(bg);
+    const done=v=>{ bg.remove(); resolve(v); };
+    bg.querySelector("#ucNo").onclick=()=>done(false);
+    bg.querySelector("#ucYes").onclick=()=>done(true);
+    bg.onclick=e=>{ if(e.target===bg) done(false); };
+  });
+}
 
 // ── Login ──
 $("loginForm").addEventListener("submit", async (e)=>{
@@ -913,7 +930,7 @@ async function mailSend(){
     test_to=$("mailTestTo").value.trim();
     if(!test_to){ msg($("panelMsg"),"Indicá la dirección de prueba.","error"); return; }
   } else {
-    if(!confirm(`Vas a ENVIAR de verdad a ${recipients.filter(r=>r.email).length} socios. ¿Confirmás?`)) return;
+    if(!(await uiConfirm({title:"Enviar a los socios", message:`Vas a enviar el mail <b>de verdad</b> a <b>${recipients.filter(r=>r.email).length}</b> socio(s) con email.`, ok:"Enviar", danger:true}))) return;
   }
   const payload={ subject, body, dry_run:false, test_to,
     recipients: recipients.map(r=>({ email:r.email||null, vars:recipVars(r),
@@ -1519,14 +1536,34 @@ async function saveAuto(silent){
     if(!silent){ $("a_result").innerHTML=okMsg("Configuración guardada."); renderAuto(); } }
   catch(err){ if(!silent) $("a_result").innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
 }
-async function autoAddReport(){
-  const tipo=confirm("¿Reporte interno (a una dirección)?\n\nAceptar = Interno · Cancelar = A cada socio")?"interno":"socios";
-  const nombre=prompt("Nombre del reporte:", tipo==="interno"?"Nuevo reporte interno":"Recordatorio a socios"); if(!nombre) return;
-  const rep=await api("/api/auto/report",{method:"POST",body:JSON.stringify({tipo,nombre})});
-  autoSel=rep.id; await loadAuto();
+function autoAddReport(){
+  const bg=document.createElement("div"); bg.className="modal-bg";
+  bg.innerHTML=`<div class="modal"><h3>Nuevo reporte automático</h3>
+    <label>Nombre del reporte</label>
+    <input id="nrNombre" placeholder="Ej: Vencidos quincenal" />
+    <label style="margin-top:.7rem">¿A quién se envía?</label>
+    <label class="opt" style="align-items:flex-start"><input type="radio" name="nrTipo" value="interno" checked style="margin-top:.2rem" />
+      <span><b>Interno</b> — un mail a una dirección (las bibliotecarias), con el panorama general.</span></label>
+    <label class="opt" style="align-items:flex-start"><input type="radio" name="nrTipo" value="socios" style="margin-top:.2rem" />
+      <span><b>A cada socio</b> — un mail personalizado a cada socio que cumpla los criterios.</span></label>
+    <div class="row-btns"><button class="btn-sec" id="nrCancel">Cancelar</button>
+      <button class="primary" style="width:auto;margin:0" id="nrOk">Crear reporte</button></div></div>`;
+  document.body.appendChild(bg);
+  const close=()=>bg.remove();
+  bg.querySelector("#nrCancel").onclick=close;
+  bg.onclick=(e)=>{ if(e.target===bg) close(); };
+  bg.querySelector("#nrOk").onclick=async ()=>{
+    const nombre=bg.querySelector("#nrNombre").value.trim();
+    if(!nombre){ bg.querySelector("#nrNombre").focus(); return; }
+    const tipo=bg.querySelector('input[name="nrTipo"]:checked').value;
+    close();
+    try { const rep=await api("/api/auto/report",{method:"POST",body:JSON.stringify({tipo,nombre})});
+      autoSel=rep.id; await loadAuto(); } catch(err){ msg($("panelMsg"),err.message,"error"); }
+  };
+  bg.querySelector("#nrNombre").focus();
 }
 async function autoDelReport(){
-  if(!confirm("¿Eliminar este reporte?")) return;
+  if(!(await uiConfirm({title:"Eliminar reporte", message:"Se va a eliminar este reporte automático. No se puede deshacer.", ok:"Eliminar", danger:true}))) return;
   autoCfg=await api("/api/auto/report/"+autoSel,{method:"DELETE"});
   autoSel=autoCfg.reports[0]?.id||null; renderAuto();
 }
@@ -1567,7 +1604,7 @@ async function runAuto(real){
   const res=$("a_result"), r=autoCfg.reports.find(x=>x.id===autoSel);
   let test_to=null;
   if(!real){ test_to=$("a_testto").value.trim(); if(!test_to){ res.innerHTML='<div class="msg error">Escribí una dirección de prueba.</div>'; return; } }
-  else if(!confirm("Vas a ENVIAR de verdad ahora. ¿Confirmás?")) return;
+  else if(!(await uiConfirm({title:"Enviar ahora", message:"Vas a enviar este reporte <b>de verdad</b> a los destinatarios reales.", ok:"Enviar", danger:true}))) return;
   await saveAuto(true); res.innerHTML="Enviando…";
   try {
     const d=await api("/api/auto/run/"+autoSel,{method:"POST",body:JSON.stringify({test_to})});
