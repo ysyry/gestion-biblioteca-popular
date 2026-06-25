@@ -501,8 +501,6 @@ async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_r
         except (TypeError, ValueError):
             return False
 
-    def paga(m): return pl_by[m]["estado"] == "al_dia"
-
     def info(card, s=None):
         k = koha_by.get(card, {})
         return {"carnet": k.get("cardnumber") or (s["matricula"] if s else ""),
@@ -510,9 +508,15 @@ async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_r
                 "nombre": k.get("firstname") or (s["nombre"] if s else ""),
                 "email": k.get("email") or ""}
 
-    deudores_retiran = [info(m, pl_by[m]) for m in inter if not paga(m) and retira(m)]
-    pagan_no_retiran = [info(m, pl_by[m]) for m in inter if paga(m) and not retira(m)]
-    retiran_sin_planilla = [info(k) for k in (ks - ps) if retira(k)]
+    # Lista completa de socios que coinciden, con meses adeudados y si retira.
+    # El frontend arma la matriz/listas aplicando un umbral configurable de meses.
+    matched = []
+    for m in inter:
+        d = info(m, pl_by[m])
+        d["debe"] = pl_by[m].get("debe", 0)
+        d["impagos"] = pl_by[m].get("impagos", [])
+        d["retira"] = retira(m)
+        matched.append(d)
 
     return {
         "configured": True,
@@ -522,55 +526,54 @@ async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_r
         "coinciden": len(inter),
         "solo_koha": len(ks - ps),
         "solo_planilla": len(ps - ks),
-        "cuadrantes": {
-            "paga_retira": sum(1 for m in inter if paga(m) and retira(m)),
-            "paga_no_retira": len(pagan_no_retiran),
-            "no_paga_retira": len(deudores_retiran),
-            "no_paga_no_retira": sum(1 for m in inter if not paga(m) and not retira(m)),
-        },
-        "deudores_retiran": deudores_retiran,
-        "pagan_no_retiran": pagan_no_retiran,
-        "retiran_sin_planilla": retiran_sin_planilla,
+        "matched": matched,
+        "retiran_sin_planilla": [info(k) for k in (ks - ps) if retira(k)],
     }
 
 
-# ── Envíos automáticos ─────────────────────────────────────────────────────────
+# ── Envíos automáticos (lista de reportes configurables) ───────────────────────
 @router.get("/auto/config", tags=["auto"])
 async def auto_config_get(_: str = Depends(get_current_username)):
-    """Configuración actual de los dos envíos automáticos + última ejecución."""
+    """Lista de reportes automáticos + última ejecución de cada uno."""
     return auto_mail.load_config()
 
 
-@router.put("/auto/config", tags=["auto"])
-async def auto_config_put(partial: dict = Body(...), _: str = Depends(get_current_username)):
-    """Guarda (merge) la configuración de uno o ambos jobs."""
-    return auto_mail.save_config(partial)
+@router.post("/auto/report", tags=["auto"])
+async def auto_report_add(body: dict = Body(...), _: str = Depends(get_current_username)):
+    """Crea un reporte nuevo. body: {tipo: 'interno'|'socios', nombre}."""
+    return auto_mail.add_report((body or {}).get("tipo", "interno"), (body or {}).get("nombre", ""))
 
 
-@router.get("/auto/preview/{job}", tags=["auto"])
-async def auto_preview(job: str, _: str = Depends(get_current_username)):
+@router.put("/auto/report/{rid}", tags=["auto"])
+async def auto_report_update(rid: str, partial: dict = Body(...), _: str = Depends(get_current_username)):
+    """Actualiza (merge) la configuración de un reporte."""
+    return auto_mail.update_report(rid, partial)
+
+
+@router.delete("/auto/report/{rid}", tags=["auto"])
+async def auto_report_delete(rid: str, _: str = Depends(get_current_username)):
+    return auto_mail.delete_report(rid)
+
+
+@router.get("/auto/preview/{rid}", tags=["auto"])
+async def auto_preview(rid: str, _: str = Depends(get_current_username)):
     """Vista previa de lo que se enviaría (sin enviar nada)."""
-    cfg = auto_mail.load_config()
-    if job not in auto_mail.JOBS:
-        raise HTTPException(status_code=404, detail="Job desconocido.")
+    rep = auto_mail.get_report(rid)
+    if not rep:
+        raise HTTPException(status_code=404, detail="Reporte desconocido.")
     try:
-        if job == "resumen_interno":
-            return await auto_mail.build_resumen(cfg[job])
-        return await auto_mail.build_recordatorio(cfg[job])
+        return await auto_mail.preview_report(rep)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/auto/run/{job}", tags=["auto"])
-async def auto_run(job: str, body: dict = Body(default={}), _: str = Depends(get_current_username)):
-    """Ejecuta un job ahora. Si se pasa test_to, manda todo a esa dirección de prueba."""
-    cfg = auto_mail.load_config()
-    if job not in auto_mail.JOBS:
-        raise HTTPException(status_code=404, detail="Job desconocido.")
-    test_to = (body or {}).get("test_to") or None
+@router.post("/auto/run/{rid}", tags=["auto"])
+async def auto_run(rid: str, body: dict = Body(default={}), _: str = Depends(get_current_username)):
+    """Ejecuta un reporte ahora. Si se pasa test_to, manda una prueba a esa dirección."""
+    rep = auto_mail.get_report(rid)
+    if not rep:
+        raise HTTPException(status_code=404, detail="Reporte desconocido.")
     try:
-        if job == "resumen_interno":
-            return await auto_mail.run_resumen(cfg[job], test_to=test_to)
-        return await auto_mail.run_recordatorio(cfg[job], test_to=test_to)
+        return await auto_mail.run_report(rep, test_to=(body or {}).get("test_to") or None)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

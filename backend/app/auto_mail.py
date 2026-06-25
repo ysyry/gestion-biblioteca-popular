@@ -1,18 +1,24 @@
-"""Envíos automáticos de la biblioteca.
+"""Envíos automáticos de la biblioteca — sistema de reportes configurables.
 
-Dos funciones configurables:
-  1. resumen_interno    → un mail a la biblioteca con préstamos por vencer + vencidos.
-  2. recordatorio_socios → un mail a cada socio con préstamos por vencer/vencidos.
+Hay una LISTA de reportes; cada uno se configura por separado (en tabs en la UI).
+Un reporte tiene:
+  - tipo: "interno" (un mail a una dirección) o "socios" (uno por socio).
+  - contenido combinable: vencidos, por vencer, deuda de cuota.
+  - cada_dias: frecuencia. dias_antes: ventana de "por vencer".
+  - asunto / cuerpo / pie propios. Para "socios": lista de excluidos.
 
-La config se persiste en backend/data/auto_config.json. Los jobs corren SIN nadie
-logueado, así que usan las credenciales de SERVICIO de Koha (KOHA_USER/PASSWORD).
-El programador (APScheduler) chequea una vez por día y dispara según `cada_dias`.
+Los jobs corren SIN nadie logueado: usan las credenciales de SERVICIO de Koha.
+La planilla de cuotas se lee con la cuenta de servicio de Google (módulo cuotas).
+El programador (APScheduler) chequea 1 vez por día y dispara según `cada_dias`.
+La config se persiste con el módulo storage (Postgres o archivo).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date
 
+from . import cuotas
 from . import mail
 from . import storage
 from .config import settings
@@ -21,74 +27,135 @@ from .koha.reports import KohaRepository
 
 logger = logging.getLogger("auto_mail")
 
-CONFIG_KEY = "auto_mail"  # clave en el almacenamiento (Postgres o archivo)
-
-JOBS = ("resumen_interno", "recordatorio_socios")
-
-DEFAULTS = {
-    "resumen_interno": {
-        "enabled": False,
-        "to": "",                 # vacío => usa SMTP_FROM
-        "cada_dias": 7,
-        "dias_antes": 7,          # "por vencer" = vence dentro de N días
-        "subject": "Resumen de préstamos — Biblioteca Osvaldo Bayer",
-        "body": ("Resumen automático de préstamos al {{fecha}}.\n\n"
-                 "VENCIDOS ({{total_vencidos}}):\n{{lista_vencidos}}\n\n"
-                 "POR VENCER en los próximos {{dias_antes}} días ({{total_por_vencer}}):\n"
-                 "{{lista_por_vencer}}\n\n"
-                 "Socios con préstamos vencidos: {{total_socios_deben}}."),
-        "footer": "— Sistema de gestión · Biblioteca Popular Osvaldo Bayer",
-    },
-    "recordatorio_socios": {
-        "enabled": False,
-        "cada_dias": 7,
-        "dias_antes": 3,
-        "incluir_vencidos": True,
-        "incluir_por_vencer": True,
-        "umbral_atraso": 1,       # mínimo de días de atraso para incluir un vencido
-        "subject": "Tus préstamos en la Biblioteca Osvaldo Bayer",
-        "body": ("Hola {{nombre}},\n\n"
-                 "Te recordamos tus préstamos en la Biblioteca Popular Osvaldo Bayer.\n\n"
-                 "Vencidos ({{cantidad_vencidos}}):\n{{vencidos}}\n\n"
-                 "Por vencer ({{cantidad_por_vencer}}):\n{{por_vencer}}"),
-        "footer": "Te esperamos para renovarlos o devolverlos. ¡Gracias!\nBiblioteca Popular Osvaldo Bayer.",
-    },
-}
+CONFIG_KEY = "auto_mail"
 
 
-# ── Config ──────────────────────────────────────────────────────────────────
+def _default_reports() -> list[dict]:
+    return [
+        {
+            "id": "resumen", "nombre": "Resumen interno", "tipo": "interno", "enabled": False,
+            "cada_dias": 7, "dias_antes": 7, "to": "",
+            "incluir_vencidos": True, "incluir_por_vencer": True, "incluir_cuotas": False, "umbral_cuota": 1,
+            "subject": "Resumen de préstamos — Biblioteca Osvaldo Bayer",
+            "body": ("Resumen automático al {{fecha}}.\n\n"
+                     "VENCIDOS ({{total_vencidos}}):\n{{lista_vencidos}}\n\n"
+                     "POR VENCER en los próximos {{dias_antes}} días ({{total_por_vencer}}):\n"
+                     "{{lista_por_vencer}}\n\n"
+                     "Socios con préstamos vencidos: {{total_socios_deben}}."),
+            "footer": "— Sistema de gestión · Biblioteca Popular Osvaldo Bayer",
+        },
+        {
+            "id": "socios", "nombre": "Recordatorio a socios", "tipo": "socios", "enabled": False,
+            "cada_dias": 7, "dias_antes": 3,
+            "incluir_vencidos": True, "incluir_por_vencer": True, "incluir_cuotas": False,
+            "umbral_atraso": 1, "umbral_cuota": 1, "excluidos": [],
+            "subject": "Tus préstamos en la Biblioteca Osvaldo Bayer",
+            "body": ("Hola {{nombre}},\n\n"
+                     "Te recordamos tus préstamos en la Biblioteca Popular Osvaldo Bayer.\n\n"
+                     "Vencidos ({{cantidad_vencidos}}):\n{{vencidos}}\n\n"
+                     "Por vencer ({{cantidad_por_vencer}}):\n{{por_vencer}}"),
+            "footer": "Te esperamos para renovarlos o devolverlos. ¡Gracias!\nBiblioteca Popular Osvaldo Bayer.",
+        },
+    ]
+
+
+# ── Config (lista de reportes) ──────────────────────────────────────────────
 def load_config() -> dict:
     data = storage.get(CONFIG_KEY) or {}
-    cfg = {job: {**DEFAULTS[job], **(data.get(job) or {})} for job in JOBS}
-    cfg["_last_run"] = data.get("_last_run") or {job: None for job in JOBS}
-    return cfg
+    reports = data.get("reports")
+    if not reports:
+        # Migración del formato viejo (dos jobs fijos) o primer arranque.
+        reports = _default_reports()
+        if data.get("resumen_interno") or data.get("recordatorio_socios"):
+            mapa = {"resumen": "resumen_interno", "socios": "recordatorio_socios"}
+            for rep in reports:
+                old = data.get(mapa.get(rep["id"], ""), {})
+                rep.update({k: v for k, v in old.items() if k in rep})
+    last = data.get("_last_run") or {}
+    return {"reports": reports, "_last_run": last}
 
 
-def save_config(partial: dict) -> dict:
-    cfg = load_config()
-    for job in JOBS:
-        if isinstance(partial.get(job), dict):
-            cfg[job] = {**cfg[job], **partial[job]}
-    storage.set(CONFIG_KEY, cfg)
-    return cfg
-
-
-def _mark_run(job: str, when: str) -> None:
-    cfg = load_config()
-    cfg["_last_run"][job] = when
+def _save(cfg: dict) -> None:
     storage.set(CONFIG_KEY, cfg)
 
 
-# ── Datos (Koha, con credenciales de servicio) ──────────────────────────────
+def get_report(rid: str) -> dict | None:
+    return next((r for r in load_config()["reports"] if r["id"] == rid), None)
+
+
+def add_report(tipo: str, nombre: str) -> dict:
+    cfg = load_config()
+    base = next(r for r in _default_reports() if r["tipo"] == (tipo if tipo in ("interno", "socios") else "interno"))
+    rep = {**base, "id": _new_id(cfg["reports"]), "nombre": nombre or base["nombre"], "enabled": False}
+    cfg["reports"].append(rep)
+    _save(cfg)
+    return rep
+
+
+def update_report(rid: str, partial: dict) -> dict:
+    cfg = load_config()
+    for r in cfg["reports"]:
+        if r["id"] == rid:
+            r.update({k: v for k, v in partial.items() if k != "id"})
+    _save(cfg)
+    return cfg
+
+
+def delete_report(rid: str) -> dict:
+    cfg = load_config()
+    cfg["reports"] = [r for r in cfg["reports"] if r["id"] != rid]
+    cfg["_last_run"].pop(rid, None)
+    _save(cfg)
+    return cfg
+
+
+def _new_id(reports: list[dict]) -> str:
+    n = 1
+    ids = {r["id"] for r in reports}
+    while f"r{n}" in ids:
+        n += 1
+    return f"r{n}"
+
+
+def _mark_run(rid: str, when: str) -> None:
+    cfg = load_config()
+    cfg["_last_run"][rid] = when
+    _save(cfg)
+
+
+# ── Datos (Koha + cuotas, con credenciales de servicio) ─────────────────────
+def _norm(x) -> str:
+    x = str(x or "").strip()
+    return x.lstrip("0") or x
+
+
 async def _all_loans() -> list[dict]:
     if not settings.koha_user or not settings.koha_password:
-        raise RuntimeError("Faltan credenciales de servicio de Koha (KOHA_USER/KOHA_PASSWORD en .env).")
+        raise RuntimeError("Faltan credenciales de servicio de Koha (KOHA_USER/KOHA_PASSWORD).")
     client = KohaClient(settings.koha_base_url, settings.koha_user, settings.koha_password)
     await client.login()
     try:
         return await KohaRepository(client).loans_contact()
     finally:
         await client.aclose()
+
+
+async def _members_map() -> dict:
+    """{carnet_norm: {surname, firstname, email}} — para contactar deudores de cuota."""
+    client = KohaClient(settings.koha_base_url, settings.koha_user, settings.koha_password)
+    await client.login()
+    try:
+        rows = await client.run_sql("SELECT cardnumber, surname, firstname, email FROM borrowers")
+    finally:
+        await client.aclose()
+    return {_norm(r["cardnumber"]): r for r in rows if r.get("cardnumber")}
+
+
+async def _cuota_map() -> dict:
+    if not cuotas.configured():
+        return {}
+    data = await asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles()))
+    return {_norm(s["matricula"]): s for s in data["socios"] if s.get("matricula")}
 
 
 def _d(s) -> str:
@@ -102,73 +169,78 @@ def _dias(row) -> int | None:
         return None
 
 
-# ── Resumen interno ─────────────────────────────────────────────────────────
-def _build_resumen_vars(rows: list[dict], cfg: dict) -> tuple[dict, dict]:
-    dias_antes = int(cfg["dias_antes"])
+def _titulo(l):
+    return l.get("title") or l.get("barcode") or "(sin título)"
+
+
+def _split_loans(rows, dias_antes, umbral_atraso=1):
     venc, porv = [], []
     for r in rows:
         d = _dias(r)
         if d is None:
             continue
-        if d > 0:
+        if d >= umbral_atraso and d > 0:
             venc.append(r)
         elif -dias_antes <= d <= 0:
             porv.append(r)
-    venc.sort(key=lambda r: -_dias(r))
-    porv.sort(key=lambda r: _dias(r))
+    venc.sort(key=lambda r: -(_dias(r) or 0))
+    porv.sort(key=lambda r: (_dias(r) or 0))
+    return venc, porv
 
-    def nombre(r):
+
+# ── Reporte INTERNO (a una dirección) ───────────────────────────────────────
+async def build_interno(rep: dict) -> dict:
+    rows = await _all_loans()
+    dias_antes = int(rep.get("dias_antes", 7))
+    venc, porv = _split_loans(rows, dias_antes, 1)
+
+    def nom(r):
         return f'{r.get("surname","")}, {r.get("firstname","")}'.strip(", ")
 
-    def lv(r):
-        return f"• {nombre(r)} — {r.get('title') or r.get('barcode') or '(sin título)'} (venció {_d(r.get('date_due'))}, {_dias(r)} días)"
-
-    def lp(r):
-        return f"• {nombre(r)} — {r.get('title') or r.get('barcode') or '(sin título)'} (vence {_d(r.get('date_due'))}, en {-_dias(r)} días)"
-
-    def titulo(r):
-        return r.get("title") or r.get("barcode") or "(sin título)"
-
-    socios_deben = len({r.get("cardnumber") for r in venc if r.get("cardnumber")})
     vars = {
         "fecha": date.today().isoformat(),
         "dias_antes": str(dias_antes),
         "total_vencidos": str(len(venc)),
         "total_por_vencer": str(len(porv)),
-        "total_socios_deben": str(socios_deben),
-        "lista_vencidos": "\n".join(lv(r) for r in venc) or "ninguno",
-        "lista_por_vencer": "\n".join(lp(r) for r in porv) or "ninguno",
+        "total_socios_deben": str(len({r.get("cardnumber") for r in venc if r.get("cardnumber")})),
+        "lista_vencidos": "\n".join(f"• {nom(r)} — {_titulo(r)} (venció {_d(r.get('date_due'))}, {_dias(r)} días)" for r in venc) or "ninguno",
+        "lista_por_vencer": "\n".join(f"• {nom(r)} — {_titulo(r)} (vence {_d(r.get('date_due'))})" for r in porv) or "ninguno",
+        "total_deudores_cuota": "0", "lista_cuotas": "ninguno",
     }
     html_blocks = {
-        "lista_vencidos": mail.html_table(
-            ["Socio", "Libro", "Venció", "Atraso"],
-            [[nombre(r), titulo(r), _d(r.get("date_due")), f"{_dias(r)} días"] for r in venc]),
-        "lista_por_vencer": mail.html_table(
-            ["Socio", "Libro", "Vence", "Falta"],
-            [[nombre(r), titulo(r), _d(r.get("date_due")), f"{-_dias(r)} días"] for r in porv]),
+        "lista_vencidos": mail.html_table(["Socio", "Libro", "Venció", "Atraso"],
+                                          [[nom(r), _titulo(r), _d(r.get("date_due")), f"{_dias(r)} días"] for r in venc]),
+        "lista_por_vencer": mail.html_table(["Socio", "Libro", "Vence"],
+                                            [[nom(r), _titulo(r), _d(r.get("date_due"))] for r in porv]),
     }
-    stats = {"vencidos": len(venc), "por_vencer": len(porv), "socios_deben": socios_deben}
-    return vars, html_blocks, stats
+    stats = {"vencidos": len(venc), "por_vencer": len(porv)}
 
+    if rep.get("incluir_cuotas"):
+        umbral = int(rep.get("umbral_cuota", 1))
+        cm = await _cuota_map()
+        deud = [s for s in cm.values() if (s.get("debe", 0) or 0) >= umbral]
+        deud.sort(key=lambda s: -s.get("debe", 0))
+        vars["total_deudores_cuota"] = str(len(deud))
+        vars["lista_cuotas"] = "\n".join(
+            f"• {s['apellido']}, {s['nombre']} (mat. {s['matricula']}) — debe {s['debe']}: {', '.join(s.get('impagos', []))}"
+            for s in deud) or "ninguno"
+        html_blocks["lista_cuotas"] = mail.html_table(
+            ["Socio", "Matrícula", "Debe", "Meses"],
+            [[f"{s['apellido']}, {s['nombre']}", s["matricula"], f"{s['debe']} mes(es)", ", ".join(s.get("impagos", []))] for s in deud])
+        stats["deudores_cuota"] = len(deud)
 
-async def build_resumen(cfg: dict) -> dict:
-    rows = await _all_loans()
-    vars, html_blocks, stats = _build_resumen_vars(rows, cfg)
-    footer = ("\n\n" + cfg["footer"]) if cfg.get("footer") else ""
+    footer = ("\n\n" + rep["footer"]) if rep.get("footer") else ""
     return {
-        "to": (cfg.get("to") or "").strip() or settings.smtp_from or settings.smtp_user,
-        "subject_tpl": cfg["subject"],
-        "body_tpl": cfg["body"] + footer,
-        "vars": vars,
-        "html": html_blocks,
-        "subject": mail.render(cfg["subject"], vars),       # para la vista previa
-        "body": mail.render(cfg["body"], vars) + footer,    # texto plano (preview)
-        "stats": stats,
+        "to": (rep.get("to") or "").strip() or settings.smtp_from or settings.smtp_user,
+        "subject_tpl": rep["subject"], "body_tpl": rep["body"] + footer,
+        "vars": vars, "html": html_blocks, "stats": stats,
+        "subject": mail.render(rep["subject"], vars),
+        "body": mail.render(rep["body"], vars) + footer,
     }
 
 
-async def run_resumen(cfg: dict, test_to: str | None = None) -> dict:
-    data = await build_resumen(cfg)
+async def run_interno(rep: dict, test_to: str | None = None) -> dict:
+    data = await build_interno(rep)
     to = test_to or data["to"]
     if not to:
         raise RuntimeError("No hay dirección destino (configurá 'A qué correo' o SMTP_FROM).")
@@ -180,104 +252,129 @@ async def run_resumen(cfg: dict, test_to: str | None = None) -> dict:
     return {"sent_to": to, "stats": data["stats"], "result": res}
 
 
-# ── Recordatorio a socios ───────────────────────────────────────────────────
-def _build_recordatorio_recipients(rows: list[dict], cfg: dict) -> dict:
-    dias_antes = int(cfg["dias_antes"])
-    umbral = int(cfg["umbral_atraso"])
-    inc_v = bool(cfg["incluir_vencidos"])
-    inc_p = bool(cfg["incluir_por_vencer"])
+# ── Reporte A SOCIOS (uno por socio) ────────────────────────────────────────
+async def _socios_recipients(rep: dict) -> dict:
+    dias_antes = int(rep.get("dias_antes", 3))
+    umbral_atraso = int(rep.get("umbral_atraso", 1))
+    inc_v = bool(rep.get("incluir_vencidos"))
+    inc_p = bool(rep.get("incluir_por_vencer"))
+    inc_c = bool(rep.get("incluir_cuotas"))
+    umbral_cuota = int(rep.get("umbral_cuota", 1))
+    excluidos = {_norm(x) for x in (rep.get("excluidos") or [])}
 
+    rows = await _all_loans()
     by: dict[str, dict] = {}
     for r in rows:
         c = r.get("cardnumber")
         if not c:
             continue
-        by.setdefault(c, {"info": r, "loans": []})["loans"].append(r)
+        by.setdefault(_norm(c), {"info": r, "loans": []})["loans"].append(r)
 
-    def tit(l):
-        return l.get("title") or l.get("barcode") or "(sin título)"
+    cm = await _cuota_map() if inc_c else {}
+    members = await _members_map() if inc_c else {}
 
-    def fv(l):
-        return f"• {tit(l)} (venció {_d(l.get('date_due'))})"
-
-    def fp(l):
-        return f"• {tit(l)} (vence {_d(l.get('date_due'))})"
+    carnets = set()
+    for c, g in by.items():
+        venc = [l for l in g["loans"] if (_dias(l) or 0) >= umbral_atraso and (_dias(l) or 0) > 0]
+        porv = [l for l in g["loans"] if _dias(l) is not None and -dias_antes <= _dias(l) <= 0]
+        if (inc_v and venc) or (inc_p and porv):
+            carnets.add(c)
+    if inc_c:
+        for c, s in cm.items():
+            if (s.get("debe", 0) or 0) >= umbral_cuota:
+                carnets.add(c)
 
     recipients = []
-    for c, g in by.items():
-        venc = [l for l in g["loans"] if (_dias(l) or 0) >= umbral]
-        porv = [l for l in g["loans"] if _dias(l) is not None and -dias_antes <= _dias(l) <= 0]
-        relevante = (inc_v and venc) or (inc_p and porv)
-        if not relevante:
+    for c in carnets:
+        if c in excluidos:
             continue
+        g = by.get(c, {"info": {}, "loans": []})
         info = g["info"]
+        m = members.get(c, {})
+        nombre = info.get("firstname") or m.get("firstname") or ""
+        apellido = info.get("surname") or m.get("surname") or ""
+        email = info.get("email") or m.get("email") or None
+        carnet = info.get("cardnumber") or (cm.get(c, {}).get("matricula")) or c
+        venc = [l for l in g["loans"] if (_dias(l) or 0) >= umbral_atraso and (_dias(l) or 0) > 0]
+        porv = [l for l in g["loans"] if _dias(l) is not None and -dias_antes <= _dias(l) <= 0]
+        s = cm.get(c, {})
         recipients.append({
-            "email": info.get("email") or None,
+            "email": email,
             "vars": {
-                "nombre": info.get("firstname", ""), "apellido": info.get("surname", ""), "carnet": c,
-                "vencidos": "\n".join(fv(l) for l in venc) or "ninguno",
-                "por_vencer": "\n".join(fp(l) for l in porv) or "ninguno",
-                "cantidad_vencidos": str(len(venc)),
-                "cantidad_por_vencer": str(len(porv)),
+                "nombre": nombre, "apellido": apellido, "carnet": carnet,
+                "vencidos": "\n".join(f"• {_titulo(l)} (venció {_d(l.get('date_due'))})" for l in venc) or "ninguno",
+                "por_vencer": "\n".join(f"• {_titulo(l)} (vence {_d(l.get('date_due'))})" for l in porv) or "ninguno",
+                "cantidad_vencidos": str(len(venc)), "cantidad_por_vencer": str(len(porv)),
+                "meses_debe": str(s.get("debe", 0)),
+                "meses_impagos": ", ".join(s.get("impagos", [])) or "—",
             },
             "html": {
-                "vencidos": mail.html_table(["Libro", "Venció"], [[tit(l), _d(l.get("date_due"))] for l in venc]),
-                "por_vencer": mail.html_table(["Libro", "Vence"], [[tit(l), _d(l.get("date_due"))] for l in porv]),
+                "vencidos": mail.html_table(["Libro", "Venció"], [[_titulo(l), _d(l.get("date_due"))] for l in venc]),
+                "por_vencer": mail.html_table(["Libro", "Vence"], [[_titulo(l), _d(l.get("date_due"))] for l in porv]),
             },
             "subject": None, "body": None,
+            "_carnet": carnet, "_vencidos": len(venc), "_porvencer": len(porv), "_debe": s.get("debe", 0),
         })
+    recipients.sort(key=lambda r: (r["vars"]["apellido"], r["vars"]["nombre"]))
     con_email = sum(1 for r in recipients if r["email"])
     return {"recipients": recipients, "con_email": con_email, "sin_email": len(recipients) - con_email}
 
 
-def _body_tpl(cfg: dict) -> str:
-    return cfg["body"] + (("\n\n" + cfg["footer"]) if cfg.get("footer") else "")
+def _body_tpl(rep: dict) -> str:
+    return rep["body"] + (("\n\n" + rep["footer"]) if rep.get("footer") else "")
 
 
-async def build_recordatorio(cfg: dict) -> dict:
-    rows = await _all_loans()
-    data = _build_recordatorio_recipients(rows, cfg)
+async def build_socios(rep: dict) -> dict:
+    data = await _socios_recipients(rep)
+    recs = data["recipients"]
     sample = None
-    if data["recipients"]:
-        r0 = data["recipients"][0]
-        sample = {
-            "subject": mail.render(cfg["subject"], r0["vars"]),
-            "body": mail.render(_body_tpl(cfg), r0["vars"]),
-            "email": r0["email"],
-        }
-    return {"total": len(data["recipients"]), "con_email": data["con_email"],
-            "sin_email": data["sin_email"], "sample": sample}
+    if recs:
+        r0 = recs[0]
+        sample = {"subject": mail.render(rep["subject"], r0["vars"]),
+                  "body": mail.render(_body_tpl(rep), r0["vars"]), "email": r0["email"]}
+    destinatarios = [{"carnet": r["_carnet"], "nombre": r["vars"]["nombre"], "apellido": r["vars"]["apellido"],
+                      "email": r["email"] or "", "vencidos": r["_vencidos"], "por_vencer": r["_porvencer"],
+                      "debe": r["_debe"]} for r in recs]
+    return {"total": len(recs), "con_email": data["con_email"], "sin_email": data["sin_email"],
+            "sample": sample, "destinatarios": destinatarios}
 
 
-async def run_recordatorio(cfg: dict, test_to: str | None = None) -> dict:
-    rows = await _all_loans()
-    data = _build_recordatorio_recipients(rows, cfg)
-    res = await mail.send_campaign(cfg["subject"], _body_tpl(cfg), data["recipients"],
-                                   dry_run=False, test_to=test_to)
+async def run_socios(rep: dict, test_to: str | None = None) -> dict:
+    data = await _socios_recipients(rep)
+    recs = data["recipients"]
+    if test_to:
+        recs = recs[:1]   # prueba: una sola muestra
+    res = await mail.send_campaign(rep["subject"], _body_tpl(rep), recs, dry_run=False, test_to=test_to)
     return {"stats": {"socios": len(data["recipients"]), "con_email": data["con_email"],
-                      "sin_email": data["sin_email"]}, "result": res}
+                      "sin_email": data["sin_email"], "prueba": bool(test_to)}, "result": res}
+
+
+# ── Dispatch ────────────────────────────────────────────────────────────────
+async def preview_report(rep: dict) -> dict:
+    return await (build_interno(rep) if rep["tipo"] == "interno" else build_socios(rep))
+
+
+async def run_report(rep: dict, test_to: str | None = None) -> dict:
+    return await (run_interno(rep, test_to) if rep["tipo"] == "interno" else run_socios(rep, test_to))
 
 
 # ── Programador (chequeo diario) ────────────────────────────────────────────
 async def tick() -> None:
-    """Corre los jobs habilitados cuya última ejecución sea más vieja que `cada_dias`."""
     cfg = load_config()
     today = date.today()
-    runners = {"resumen_interno": run_resumen, "recordatorio_socios": run_recordatorio}
-    for job in JOBS:
-        c = cfg[job]
-        if not c.get("enabled"):
+    for rep in cfg["reports"]:
+        if not rep.get("enabled"):
             continue
-        last = cfg["_last_run"].get(job)
+        last = cfg["_last_run"].get(rep["id"])
         if last:
             try:
-                if (today - date.fromisoformat(last)).days < int(c["cada_dias"]):
+                if (today - date.fromisoformat(last)).days < int(rep["cada_dias"]):
                     continue
             except ValueError:
                 pass
         try:
-            await runners[job](c)
-            _mark_run(job, today.isoformat())
-            logger.info("Auto-mail '%s' ejecutado.", job)
-        except Exception as exc:
-            logger.error("Auto-mail '%s' falló: %s", job, exc)
+            await run_report(rep)
+            _mark_run(rep["id"], today.isoformat())
+            logger.info("Reporte automático '%s' ejecutado.", rep.get("nombre"))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Reporte '%s' falló: %s", rep.get("nombre"), exc)

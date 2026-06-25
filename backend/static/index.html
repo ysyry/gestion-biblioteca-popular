@@ -90,6 +90,14 @@
   .auto-actions .btn-sec { font-size:.85rem; }
   .varhint { font-size:.76rem; color:var(--muted); margin:.3rem 0 0; }
   .varhint code { background:#f3eef8; color:var(--magenta); border-radius:5px; padding:.05rem .3rem; }
+  .auto-tabs { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; margin-bottom:1.2rem; border-bottom:2px solid var(--line); padding-bottom:.6rem; }
+  .auto-tabs button { border:1px solid var(--line); background:#fff; border-radius:9px 9px 0 0; padding:.5rem .9rem;
+    cursor:pointer; font-family:inherit; font-size:.88rem; color:var(--muted); display:inline-flex; align-items:center; gap:.4rem; }
+  .auto-tabs button.active { background:var(--navy); color:#fff; border-color:var(--navy); font-weight:600; }
+  .auto-tabs button .doten { width:8px; height:8px; border-radius:50%; background:#cfd3da; }
+  .auto-tabs button.on .doten { background:var(--green); }
+  .auto-tabs .add { color:var(--magenta); border-style:dashed; font-weight:600; }
+  .auto-badge { font-size:.7rem; padding:.1rem .45rem; border-radius:99px; background:#eef0f3; color:var(--muted); }
   .auto-test { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin:.7rem 0; }
   .auto-test input { width:auto; flex:1; min-width:160px; max-width:280px; }
   .btn-sec.danger { color:var(--red); border-color:#f3c2cc; }
@@ -529,6 +537,10 @@
               <code data-v="cantidad_por_vencer">{{cantidad_por_vencer}}</code>
               <code data-v="cantidad_prestamos">{{cantidad_prestamos}}</code>
             </p>
+            <p class="meta vars">Cuota societaria:
+              <code data-v="meses_debe">{{meses_debe}}</code>
+              <code data-v="meses_impagos">{{meses_impagos}}</code>
+            </p>
             <div class="meta">Vista previa (primer destinatario):</div>
             <div id="mailPreview" class="preview">—</div>
 
@@ -542,82 +554,10 @@
         </div>
       </div>
 
-      <!-- Automáticos -->
+      <!-- Automáticos (reportes configurables en tabs) -->
       <div id="autoView" class="hide">
-        <!-- Resumen interno -->
-        <div class="card auto-card">
-          <div class="auto-head">
-            <div>
-              <h3>Resumen interno a la biblioteca</h3>
-              <div class="meta" style="margin:0">Un mail periódico con los préstamos por vencer y vencidos.</div>
-              <div class="lastrun" id="ri_lastrun"></div>
-            </div>
-            <label class="switch"><input type="checkbox" id="ri_enabled" /> Activado</label>
-          </div>
-          <label>A qué correo se envía</label>
-          <input id="ri_to" placeholder="bibliotecabayer@gmail.com (si lo dejás vacío usa el remitente)" />
-          <div class="frow" style="margin-top:.4rem">
-            <div><label>Enviar cada (días)</label><input id="ri_cada" type="number" min="1" /></div>
-            <div><label>"Por vencer" = vence dentro de (días)</label><input id="ri_antes" type="number" min="0" /></div>
-          </div>
-          <label>Asunto</label>
-          <input id="ri_subject" />
-          <label>Cuerpo</label>
-          <textarea id="ri_body" rows="7"></textarea>
-          <p class="varhint">Variables: <code>{{fecha}}</code> <code>{{lista_vencidos}}</code> <code>{{lista_por_vencer}}</code> <code>{{total_vencidos}}</code> <code>{{total_por_vencer}}</code> <code>{{total_socios_deben}}</code> <code>{{dias_antes}}</code></p>
-          <label>Pie del mensaje</label>
-          <textarea id="ri_footer" rows="2"></textarea>
-          <div class="auto-actions">
-            <button class="primary" style="width:auto;margin:0" id="ri_save">Guardar</button>
-            <button class="btn-sec" id="ri_preview">👁 Ver cómo llega</button>
-          </div>
-          <div class="auto-test">
-            <span class="meta">Probar el envío a:</span>
-            <input id="ri_testto" placeholder="tu@email.com" />
-            <button class="btn-sec" id="ri_test">Enviar prueba</button>
-          </div>
-          <div class="auto-actions"><button class="btn-sec danger" id="ri_run">Enviar ahora a destinatarios reales</button></div>
-          <div id="ri_result" style="margin-top:.8rem"></div>
-        </div>
-
-        <!-- Recordatorio a socios -->
-        <div class="card auto-card">
-          <div class="auto-head">
-            <div>
-              <h3>Recordatorio a los socios</h3>
-              <div class="meta" style="margin:0">Un mail a cada socio con préstamos por vencer o vencidos.</div>
-              <div class="lastrun" id="rs_lastrun"></div>
-            </div>
-            <label class="switch"><input type="checkbox" id="rs_enabled" /> Activado</label>
-          </div>
-          <div class="frow">
-            <div><label>Enviar cada (días)</label><input id="rs_cada" type="number" min="1" /></div>
-            <div><label>"Por vencer" = vence dentro de (días)</label><input id="rs_antes" type="number" min="0" /></div>
-            <div><label>Avisar vencidos desde (días de atraso)</label><input id="rs_umbral" type="number" min="0" /></div>
-          </div>
-          <div class="auto-actions" style="margin:.6rem 0 0">
-            <label class="opt"><input type="checkbox" id="rs_incv" /> Incluir vencidos</label>
-            <label class="opt"><input type="checkbox" id="rs_incp" /> Incluir por vencer</label>
-          </div>
-          <label>Asunto</label>
-          <input id="rs_subject" />
-          <label>Cuerpo</label>
-          <textarea id="rs_body" rows="7"></textarea>
-          <p class="varhint">Variables: <code>{{nombre}}</code> <code>{{apellido}}</code> <code>{{carnet}}</code> <code>{{vencidos}}</code> <code>{{por_vencer}}</code> <code>{{cantidad_vencidos}}</code> <code>{{cantidad_por_vencer}}</code></p>
-          <label>Pie del mensaje</label>
-          <textarea id="rs_footer" rows="2"></textarea>
-          <div class="auto-actions">
-            <button class="primary" style="width:auto;margin:0" id="rs_save">Guardar</button>
-            <button class="btn-sec" id="rs_preview">👁 Ver cómo llega</button>
-          </div>
-          <div class="auto-test">
-            <span class="meta">Probar el envío a:</span>
-            <input id="rs_testto" placeholder="tu@email.com" />
-            <button class="btn-sec" id="rs_test">Enviar prueba</button>
-          </div>
-          <div class="auto-actions"><button class="btn-sec danger" id="rs_run">Enviar ahora a destinatarios reales</button></div>
-          <div id="rs_result" style="margin-top:.8rem"></div>
-        </div>
+        <div id="autoTabs" class="auto-tabs"></div>
+        <div id="autoForm"></div>
       </div>
     </main>
   </div>
@@ -828,8 +768,13 @@ let recipients = []; // {carnet, nombre, apellido, email, ctx?, subjectOverride?
 function recipVars(r){ return Object.assign(
   {nombre:r.nombre||"", apellido:r.apellido||"", carnet:r.carnet||"", email:r.email||"",
    vencidos:"ninguno", por_vencer:"ninguno", prestamos:"ninguno",
-   cantidad_vencidos:"0", cantidad_por_vencer:"0", cantidad_prestamos:"0"},
+   cantidad_vencidos:"0", cantidad_por_vencer:"0", cantidad_prestamos:"0",
+   meses_debe:"0", meses_impagos:"—"},
   r.ctx||{}); }
+// Contexto de cuota (para mails de cuota): meses adeudados y cuáles.
+function ctxCuota(debe, impagos){
+  return { meses_debe:String(debe||0), meses_impagos:(impagos&&impagos.length)?impagos.join(", "):"—" };
+}
 
 // Calcula las etiquetas de libros (vencidos / por vencer) a partir de una lista de préstamos.
 function ctxVars(venc, porv, todos){
@@ -1297,52 +1242,73 @@ async function renderAgendaWidget(){
 }
 
 // ── Cruce de datos (Socios) ───────────────────────────────────────────────
-let cruceLists={};
+let cruceData=null, cruceUmbral=1, cruceLists={};
 async function loadCruce(){
   const el=$("cruceSection"); el.innerHTML='<div class="card">'+LOADER_SM+'</div>';
   try {
     const d=await api("/api/cruce");
     if(!d.configured){ el.innerHTML=""; return; }  // sin planilla configurada: no mostramos nada
-    cruceLists={ deudores_retiran:d.deudores_retiran, pagan_no_retiran:d.pagan_no_retiran, retiran_sin_planilla:d.retiran_sin_planilla };
-    const q=d.cuadrantes;
-    const lista=(titulo,key,cls)=>{
-      const arr=cruceLists[key]||[];
-      return `<div class="cruce-list">
-        <div class="chead" onclick="this.nextElementSibling.classList.toggle('hide')">
-          <b>${titulo}</b>
-          <span><span class="pill" onclick="event.stopPropagation();cruceAMails('${key}')">+ Agregar a Mails (${arr.length})</span></span>
-        </div>
-        <div class="cruce-rows hide">${arr.map(p=>`<div class="recip"><span class="who">${esc(p.apellido)}, ${esc(p.nombre)} <small>(${esc(p.carnet)})</small>${p.email?"":' <span class="noemail">sin email</span>'}</span></div>`).join("")||'<p class="empty">—</p>'}</div>
-      </div>`;
-    };
-    el.innerHTML=`<div class="card">
-      <h3 style="margin-top:0">Cruce con la planilla de cuotas (${d.anio})</h3>
-      <p class="meta" style="margin:.1rem 0 1rem">"Retira" = sacó al menos un libro en el último año. Matrícula de la planilla = carnet de Koha.</p>
-      <div class="kpi-grid">
-        ${statKpi(miles(d.koha_total),"Socios en Koha")}
-        ${statKpi(miles(d.planilla_total),"En la planilla de cuotas")}
-        ${statKpi(miles(d.coinciden),"Coinciden (en ambos)","ok")}
-        ${statKpi(miles(d.solo_koha),"En Koha, fuera de la planilla","warn")}
-      </div>
-      <div style="font-weight:700;color:var(--navy);margin:.4rem 0 .2rem">Socios que coinciden: ¿pagan? ¿retiran?</div>
-      <div class="matrix">
-        <div class="lbl"></div><div class="lbl">Retira libros</div><div class="lbl">No retira</div>
-        <div class="lbl">Paga</div>
-        <div class="cell good"><div class="n">${q.paga_retira}</div><div class="c">paga y retira</div></div>
-        <div class="cell warn"><div class="n">${q.paga_no_retira}</div><div class="c">paga, no retira</div></div>
-        <div class="lbl">No paga</div>
-        <div class="cell bad"><div class="n">${q.no_paga_retira}</div><div class="c">retira, no paga</div></div>
-        <div class="cell neutral"><div class="n">${q.no_paga_no_retira}</div><div class="c">ni paga ni retira</div></div>
-      </div>
-      ${lista("Retiran libros y deben cuota","deudores_retiran")}
-      ${lista("Pagan pero no retiran (fieles)","pagan_no_retiran")}
-      ${lista("Retiran pero no están en la planilla","retiran_sin_planilla")}
-    </div>`;
+    cruceData=d;
+    renderCruce();
   } catch(err){ el.innerHTML=`<div class="card"><div class="msg error">${esc(err.message)}</div></div>`; }
+}
+function renderCruce(){
+  const d=cruceData, U=cruceUmbral;
+  const conDeuda = s => (s.debe||0) >= U;
+  const m = d.matched;
+  // Cuadrantes con el umbral elegido
+  const aldia_ret  = m.filter(s=>!conDeuda(s) && s.retira);
+  const aldia_no   = m.filter(s=>!conDeuda(s) && !s.retira);
+  const deuda_ret  = m.filter(s=>conDeuda(s) && s.retira).sort((a,b)=>b.debe-a.debe);
+  const deuda_no   = m.filter(s=>conDeuda(s) && !s.retira).sort((a,b)=>b.debe-a.debe);
+  const deuda_todos= m.filter(conDeuda).sort((a,b)=>b.debe-a.debe);
+  cruceLists={ deuda_ret, aldia_no, deuda_todos, retiran_sin_planilla:d.retiran_sin_planilla };
+
+  const meses = s => `<span class="badge deuda" style="margin-left:.3rem">debe ${s.debe}</span>`;
+  const lista=(titulo,key,arr,conMeses)=>`<div class="cruce-list">
+      <div class="chead" onclick="this.nextElementSibling.classList.toggle('hide')">
+        <b>${titulo} (${arr.length})</b>
+        <span class="pill" onclick="event.stopPropagation();cruceAMails('${key}')">+ Agregar a Mails</span>
+      </div>
+      <div class="cruce-rows hide">${arr.map(p=>`<div class="recip"><span class="who">${esc(p.apellido)}, ${esc(p.nombre)} <small>(${esc(p.carnet)})</small>${conMeses?meses(p):""}${p.email?"":' <span class="noemail">sin email</span>'}</span></div>`).join("")||'<p class="empty">—</p>'}</div>
+    </div>`;
+  const opts=[1,2,3,6].map(n=>`<option value="${n}" ${n===U?'selected':''}>${n} mes${n>1?'es':''}</option>`).join("");
+
+  $("cruceSection").innerHTML=`<div class="card">
+    <h3 style="margin-top:0">Cruce con la planilla de cuotas (${d.anio})</h3>
+    <p class="meta" style="margin:.1rem 0 1rem">"Retira" = sacó al menos un libro en el último año. Matrícula de la planilla = carnet de Koha.</p>
+    <div class="kpi-grid">
+      ${statKpi(miles(d.koha_total),"Socios en Koha")}
+      ${statKpi(miles(d.planilla_total),"En la planilla de cuotas")}
+      ${statKpi(miles(d.coinciden),"Coinciden (en ambos)","ok")}
+      ${statKpi(miles(d.solo_koha),"En Koha, fuera de la planilla","warn")}
+    </div>
+    <div class="cuotas-toolbar" style="margin:.2rem 0 .6rem">
+      <span style="font-weight:700;color:var(--navy)">Socios que coinciden: ¿al día? ¿retiran?</span>
+      <label class="meta">Considerar "con deuda" desde: <select id="cruceUmbral">${opts}</select></label>
+    </div>
+    <div class="matrix">
+      <div class="lbl"></div><div class="lbl">Retira libros</div><div class="lbl">No retira</div>
+      <div class="lbl">Al día</div>
+      <div class="cell good"><div class="n">${aldia_ret.length}</div><div class="c">al día y retira</div></div>
+      <div class="cell warn"><div class="n">${aldia_no.length}</div><div class="c">al día, no retira</div></div>
+      <div class="lbl">Con deuda</div>
+      <div class="cell bad"><div class="n">${deuda_ret.length}</div><div class="c">retira y debe</div></div>
+      <div class="cell neutral"><div class="n">${deuda_no.length}</div><div class="c">no retira y debe</div></div>
+    </div>
+    <p class="meta" style="margin:.2rem 0 .6rem">"Con deuda" = debe ${U} mes${U>1?'es':''} o más de cuota (de los meses ya vencidos). Al agregarlos a Mails, podés usar <code>{{meses_debe}}</code> y <code>{{meses_impagos}}</code> en el mensaje.</p>
+    ${lista("Todos con deuda de cuota","deuda_todos",deuda_todos,true)}
+    ${lista("Retiran libros y deben cuota","deuda_ret",deuda_ret,true)}
+    ${lista("Al día pero no retiran (fieles)","aldia_no",aldia_no,false)}
+    ${lista("Retiran pero no están en la planilla","retiran_sin_planilla",d.retiran_sin_planilla,false)}
+  </div>`;
+  $("cruceUmbral").onchange=(e)=>{ cruceUmbral=+e.target.value; renderCruce(); };
 }
 window.cruceAMails=function(key){
   const arr=cruceLists[key]||[]; let n=0;
-  arr.forEach(p=>{ if(p.email && !recipients.some(r=>r.carnet===p.carnet)){ recipients.push({carnet:p.carnet,nombre:p.nombre,apellido:p.apellido,email:p.email,ctx:null}); n++; } });
+  arr.forEach(p=>{ if(p.email && !recipients.some(r=>r.carnet===p.carnet)){
+    recipients.push({carnet:p.carnet,nombre:p.nombre,apellido:p.apellido,email:p.email,
+      ctx: (p.debe!=null) ? ctxCuota(p.debe,p.impagos) : null}); n++; } });
   selectTab("mails");
   msg($("panelMsg"), `Se agregaron ${n} destinatario(s) con email a la campaña.`, "");
 };
@@ -1456,83 +1422,161 @@ function renderCuotasPage(){
   if(next) next.disabled = (cuotasFiltro.page+1)*CU_PAGE>=tot;
 }
 
-// ── Automáticos ───────────────────────────────────────────────────────────
-function lastRunText(d){ return d ? ("Última ejecución automática: "+d) : "Todavía no se ejecutó automáticamente."; }
-async function loadAuto(){
-  try {
-    const c=await api("/api/auto/config");
-    const ri=c.resumen_interno, rs=c.recordatorio_socios, lr=c._last_run||{};
-    $("ri_enabled").checked=!!ri.enabled; $("ri_to").value=ri.to||""; $("ri_cada").value=ri.cada_dias;
-    $("ri_antes").value=ri.dias_antes; $("ri_subject").value=ri.subject||""; $("ri_body").value=ri.body||""; $("ri_footer").value=ri.footer||"";
-    $("ri_lastrun").textContent=lastRunText(lr.resumen_interno);
-    $("rs_enabled").checked=!!rs.enabled; $("rs_cada").value=rs.cada_dias; $("rs_antes").value=rs.dias_antes;
-    $("rs_umbral").value=rs.umbral_atraso; $("rs_incv").checked=!!rs.incluir_vencidos; $("rs_incp").checked=!!rs.incluir_por_vencer;
-    $("rs_subject").value=rs.subject||""; $("rs_body").value=rs.body||""; $("rs_footer").value=rs.footer||"";
-    $("rs_lastrun").textContent=lastRunText(lr.recordatorio_socios);
-  } catch(err){ msg($("panelMsg"),err.message,"error"); }
-}
-function autoPartial(job){
-  if(job==="resumen_interno") return { resumen_interno:{ enabled:$("ri_enabled").checked, to:$("ri_to").value.trim(),
-    cada_dias:+$("ri_cada").value||1, dias_antes:+$("ri_antes").value||0,
-    subject:$("ri_subject").value, body:$("ri_body").value, footer:$("ri_footer").value } };
-  return { recordatorio_socios:{ enabled:$("rs_enabled").checked, cada_dias:+$("rs_cada").value||1,
-    dias_antes:+$("rs_antes").value||0, umbral_atraso:+$("rs_umbral").value||0,
-    incluir_vencidos:$("rs_incv").checked, incluir_por_vencer:$("rs_incp").checked,
-    subject:$("rs_subject").value, body:$("rs_body").value, footer:$("rs_footer").value } };
-}
-const autoRes=(job)=>$(job==="resumen_interno"?"ri_result":"rs_result");
+// ── Automáticos (reportes configurables en tabs) ───────────────────────────
 const okMsg=(t)=>`<div class="msg" style="background:#e3f5ec;color:#137a52;border:1px solid #bfe6d3">${t}</div>`;
-async function saveAuto(job, silent){
-  try { await api("/api/auto/config",{method:"PUT",body:JSON.stringify(autoPartial(job))});
-    if(!silent) autoRes(job).innerHTML=okMsg("Configuración guardada."); }
-  catch(err){ if(!silent) autoRes(job).innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
-}
 function mailMock(de, para, subject, body){
   return `<div class="mailmock">
     <div class="mm-head"><div><b>${esc(subject||"(sin asunto)")}</b></div>
       <div class="meta">De: ${esc(de||"Biblioteca")} &nbsp;·&nbsp; Para: ${esc(para||"—")}</div></div>
     <div class="mm-body">${esc(body||"")}</div></div>`;
 }
-async function previewAuto(job){
-  const res=autoRes(job); res.innerHTML="Calculando…";
-  await saveAuto(job, true);
+let autoCfg=null, autoSel=null, autoExcl=[];
+async function loadAuto(){
   try {
-    const d=await api("/api/auto/preview/"+job);
-    if(job==="resumen_interno"){
-      res.innerHTML=`<div class="meta" style="margin-bottom:.4rem">Así llegaría el resumen · vencidos: ${d.stats.vencidos} · por vencer: ${d.stats.por_vencer} · socios que deben: ${d.stats.socios_deben}</div>`
+    autoCfg=await api("/api/auto/config");
+    if(!autoCfg.reports.length){ $("autoTabs").innerHTML=""; $("autoForm").innerHTML='<p class="empty">No hay reportes. Creá uno.</p>'; }
+    if(!autoSel || !autoCfg.reports.some(r=>r.id===autoSel)) autoSel=autoCfg.reports[0]?.id||null;
+    renderAuto();
+  } catch(err){ msg($("panelMsg"),err.message,"error"); }
+}
+function renderAuto(){
+  const lr=autoCfg._last_run||{};
+  $("autoTabs").innerHTML = autoCfg.reports.map(r=>
+    `<button data-id="${r.id}" class="${r.id===autoSel?'active':''} ${r.enabled?'on':''}"><span class="doten"></span>${esc(r.nombre)}</button>`
+  ).join("") + `<button class="add" id="autoAdd">+ Nuevo reporte</button>`;
+  $("autoTabs").querySelectorAll("button[data-id]").forEach(b=>b.onclick=()=>{ autoSel=b.dataset.id; autoExcl=[]; renderAuto(); });
+  $("autoAdd").onclick=autoAddReport;
+  const rep=autoCfg.reports.find(r=>r.id===autoSel);
+  if(rep) renderAutoForm(rep, lr[rep.id]);
+}
+function renderAutoForm(r, last){
+  const esS = r.tipo==='socios';
+  autoExcl = (r.excluidos||[]).slice();
+  const varsInt='<code>{{fecha}}</code> <code>{{lista_vencidos}}</code> <code>{{lista_por_vencer}}</code> <code>{{lista_cuotas}}</code> <code>{{total_vencidos}}</code> <code>{{total_por_vencer}}</code> <code>{{total_deudores_cuota}}</code>';
+  const varsSoc='<code>{{nombre}}</code> <code>{{apellido}}</code> <code>{{vencidos}}</code> <code>{{por_vencer}}</code> <code>{{cantidad_vencidos}}</code> <code>{{meses_debe}}</code> <code>{{meses_impagos}}</code>';
+  $("autoForm").innerHTML=`<div class="card auto-card">
+    <div class="auto-head">
+      <div>
+        <input id="a_nombre" value="${esc(r.nombre)}" style="font-size:1.05rem;font-weight:700;border:none;border-bottom:1px dashed var(--line);padding:.2rem 0;max-width:320px" />
+        <div class="meta" style="margin:.2rem 0 0">${esS?'Un mail a cada socio que cumpla los criterios.':'Un mail a una dirección (las bibliotecarias).'} <span class="auto-badge">${esS?'A cada socio':'Interno'}</span></div>
+        <div class="lastrun">${last?('Última ejecución automática: '+last):'Todavía no se ejecutó automáticamente.'}</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="a_enabled" ${r.enabled?'checked':''} /> Activado</label>
+    </div>
+    ${esS?'':`<label>A qué correo se envía</label><input id="a_to" value="${esc(r.to||'')}" placeholder="bibliotecabayer@gmail.com (vacío = remitente)" />`}
+    <div class="frow" style="margin-top:.4rem">
+      <div><label>Enviar cada (días)</label><input id="a_cada" type="number" min="1" value="${r.cada_dias}" /></div>
+      <div><label>"Por vencer" = vence dentro de (días)</label><input id="a_antes" type="number" min="0" value="${r.dias_antes}" /></div>
+      ${esS?`<div><label>Avisar vencidos desde (días atraso)</label><input id="a_umbral" type="number" min="0" value="${r.umbral_atraso||1}" /></div>`:''}
+    </div>
+    <label style="margin-top:.6rem">Qué incluye</label>
+    <div class="auto-actions" style="margin:.2rem 0 0">
+      <label class="opt"><input type="checkbox" id="a_incv" ${r.incluir_vencidos?'checked':''} /> Vencidos</label>
+      <label class="opt"><input type="checkbox" id="a_incp" ${r.incluir_por_vencer?'checked':''} /> Por vencer</label>
+      <label class="opt"><input type="checkbox" id="a_incc" ${r.incluir_cuotas?'checked':''} /> Deuda de cuota</label>
+      <label class="opt" style="margin-left:.5rem">desde <input id="a_umbralc" type="number" min="1" value="${r.umbral_cuota||1}" style="width:60px" /> mes(es)</label>
+    </div>
+    <label style="margin-top:.6rem">Asunto</label>
+    <input id="a_subject" value="${esc(r.subject||'')}" />
+    <label>Cuerpo</label>
+    <textarea id="a_body" rows="7">${esc(r.body||'')}</textarea>
+    <p class="varhint">Variables: ${esS?varsSoc:varsInt}</p>
+    <label>Pie del mensaje</label>
+    <textarea id="a_footer" rows="2">${esc(r.footer||'')}</textarea>
+    <div class="auto-actions" style="margin-top:.7rem">
+      <button class="primary" style="width:auto;margin:0" id="a_save">Guardar</button>
+      <button class="btn-sec" id="a_preview">👁 Ver cómo llega</button>
+      ${esS?'<button class="btn-sec" id="a_dest">Ver / editar destinatarios</button>':''}
+      <button class="btn-sec" id="a_del" style="margin-left:auto;color:var(--red)">Eliminar reporte</button>
+    </div>
+    <div class="auto-test">
+      <span class="meta">${esS?'Probar (envía 1 muestra) a:':'Probar el envío a:'}</span>
+      <input id="a_testto" placeholder="tu@email.com" />
+      <button class="btn-sec" id="a_test">Enviar prueba</button>
+    </div>
+    <div class="auto-actions"><button class="btn-sec danger" id="a_run">Enviar ahora ${esS?'a los socios reales':'al destinatario real'}</button></div>
+    <div id="a_result" style="margin-top:.8rem"></div>
+  </div>`;
+  $("a_save").onclick=()=>saveAuto(false);
+  $("a_preview").onclick=previewAuto;
+  $("a_test").onclick=()=>runAuto(false);
+  $("a_run").onclick=()=>runAuto(true);
+  $("a_del").onclick=autoDelReport;
+  if(esS) $("a_dest").onclick=verDestinatarios;
+}
+function autoForm(){
+  const r=autoCfg.reports.find(x=>x.id===autoSel), esS=r.tipo==='socios';
+  const o={ nombre:$("a_nombre").value.trim()||r.nombre, enabled:$("a_enabled").checked,
+    cada_dias:+$("a_cada").value||1, dias_antes:+$("a_antes").value||0,
+    incluir_vencidos:$("a_incv").checked, incluir_por_vencer:$("a_incp").checked,
+    incluir_cuotas:$("a_incc").checked, umbral_cuota:+$("a_umbralc").value||1,
+    subject:$("a_subject").value, body:$("a_body").value, footer:$("a_footer").value };
+  if(esS){ o.umbral_atraso=+$("a_umbral").value||0; o.excluidos=autoExcl; } else o.to=$("a_to").value.trim();
+  return o;
+}
+async function saveAuto(silent){
+  try { autoCfg=await api("/api/auto/report/"+autoSel,{method:"PUT",body:JSON.stringify(autoForm())});
+    if(!silent){ $("a_result").innerHTML=okMsg("Configuración guardada."); renderAuto(); } }
+  catch(err){ if(!silent) $("a_result").innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
+async function autoAddReport(){
+  const tipo=confirm("¿Reporte interno (a una dirección)?\n\nAceptar = Interno · Cancelar = A cada socio")?"interno":"socios";
+  const nombre=prompt("Nombre del reporte:", tipo==="interno"?"Nuevo reporte interno":"Recordatorio a socios"); if(!nombre) return;
+  const rep=await api("/api/auto/report",{method:"POST",body:JSON.stringify({tipo,nombre})});
+  autoSel=rep.id; await loadAuto();
+}
+async function autoDelReport(){
+  if(!confirm("¿Eliminar este reporte?")) return;
+  autoCfg=await api("/api/auto/report/"+autoSel,{method:"DELETE"});
+  autoSel=autoCfg.reports[0]?.id||null; renderAuto();
+}
+async function previewAuto(){
+  const res=$("a_result"); res.innerHTML="Calculando…"; await saveAuto(true);
+  const r=autoCfg.reports.find(x=>x.id===autoSel);
+  try {
+    const d=await api("/api/auto/preview/"+autoSel);
+    if(r.tipo==='interno'){
+      const st=d.stats||{};
+      res.innerHTML=`<div class="meta" style="margin-bottom:.4rem">Así llegaría · vencidos: ${st.vencidos??0} · por vencer: ${st.por_vencer??0}${st.deudores_cuota!=null?` · deudores cuota: ${st.deudores_cuota}`:''}</div>`
         + mailMock("Biblioteca Osvaldo Bayer", d.to||"(remitente)", d.subject, d.body);
     } else {
       const s=d.sample;
-      res.innerHTML=`<div class="meta" style="margin-bottom:.4rem">Llegaría a <b>${d.total}</b> socio(s) · con email: ${d.con_email} · sin email: ${d.sin_email}. Ejemplo de cómo lo recibiría el primero:</div>`+
-        (s? mailMock("Biblioteca Osvaldo Bayer", s.email||"sin email", s.subject, s.body)
-           :'<p class="empty">Ningún socio cumple los criterios ahora.</p>');
+      res.innerHTML=`<div class="meta" style="margin-bottom:.4rem">Llegaría a <b>${d.total}</b> socio(s) · con email: ${d.con_email} · sin email: ${d.sin_email}. Ejemplo del primero:</div>`+
+        (s? mailMock("Biblioteca Osvaldo Bayer", s.email||"sin email", s.subject, s.body):'<p class="empty">Ningún socio cumple los criterios ahora.</p>');
     }
   } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
 }
-async function runAuto(job, real){
-  const res=autoRes(job);
-  let test_to=null;
-  if(!real){
-    test_to=$(job==="resumen_interno"?"ri_testto":"rs_testto").value.trim();
-    if(!test_to){ res.innerHTML='<div class="msg error">Escribí una dirección de prueba.</div>'; return; }
-  }
-  else if(!confirm("Vas a ENVIAR de verdad ahora a los destinatarios reales. ¿Confirmás?")) return;
-  await saveAuto(job, true);
-  res.innerHTML="Enviando…";
+async function verDestinatarios(){
+  const res=$("a_result"); res.innerHTML="Calculando…"; await saveAuto(true);
   try {
-    const d=await api("/api/auto/run/"+job,{method:"POST",body:JSON.stringify({test_to})});
-    const r=d.result||{};
-    let txt;
-    if(job==="resumen_interno") txt=(test_to?`Prueba enviada a ${esc(test_to)}.`:`Enviado a ${esc(d.sent_to)}.`)+` (${r.enviados||0} envío/s)`;
-    else { const st=d.stats||{}; txt=(test_to?`Prueba a ${esc(test_to)}. `:"")+`Socios: ${st.socios}, con email: ${st.con_email}, sin email: ${st.sin_email}. Enviados: ${r.enviados||0}.`; }
+    const d=await api("/api/auto/preview/"+autoSel);
+    const arr=d.destinatarios||[];
+    if(!arr.length){ res.innerHTML='<p class="empty">Ningún socio cumple los criterios ahora.</p>'; return; }
+    res.innerHTML=`<div class="meta" style="margin-bottom:.4rem">Le llegaría a <b>${arr.filter(p=>!autoExcl.includes(String(p.carnet))).length}</b> de ${arr.length} · tocá "Excluir" para sacar a alguien (después Guardá).</div>
+      <div class="recip-box">${arr.map(p=>{const ex=autoExcl.includes(String(p.carnet));
+        return `<div class="recip" style="${ex?'opacity:.45':''}"><span class="who">${esc(p.apellido)}, ${esc(p.nombre)} <small>(${esc(p.carnet)})</small> — venc: ${p.vencidos}, por venc: ${p.por_vencer}${p.debe?`, debe ${p.debe}`:''}${p.email?'':' <span class="noemail">sin email</span>'}</span>
+        <button onclick="autoToggleExcl('${esc(String(p.carnet))}',this)">${ex?'Incluir':'Excluir'}</button></div>`;}).join("")}</div>`;
+  } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
+window.autoToggleExcl=function(carnet, btn){
+  const i=autoExcl.indexOf(carnet);
+  if(i>=0){ autoExcl.splice(i,1); btn.textContent="Excluir"; btn.closest(".recip").style.opacity=""; }
+  else { autoExcl.push(carnet); btn.textContent="Incluir"; btn.closest(".recip").style.opacity=".45"; }
+};
+async function runAuto(real){
+  const res=$("a_result"), r=autoCfg.reports.find(x=>x.id===autoSel);
+  let test_to=null;
+  if(!real){ test_to=$("a_testto").value.trim(); if(!test_to){ res.innerHTML='<div class="msg error">Escribí una dirección de prueba.</div>'; return; } }
+  else if(!confirm("Vas a ENVIAR de verdad ahora. ¿Confirmás?")) return;
+  await saveAuto(true); res.innerHTML="Enviando…";
+  try {
+    const d=await api("/api/auto/run/"+autoSel,{method:"POST",body:JSON.stringify({test_to})});
+    const rr=d.result||{}; let txt;
+    if(r.tipo==='interno') txt=(test_to?`Prueba enviada a ${esc(test_to)}.`:`Enviado a ${esc(d.sent_to)}.`)+` (${rr.enviados||0} envío/s)`;
+    else { const st=d.stats||{}; txt=test_to?`Prueba (1 muestra) enviada a ${esc(test_to)}.`:`Socios: ${st.socios}, con email: ${st.con_email}. Enviados: ${rr.enviados||0}.`; }
     res.innerHTML=okMsg(txt);
   } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
 }
-[["ri_save",()=>saveAuto("resumen_interno")],["ri_preview",()=>previewAuto("resumen_interno")],
- ["ri_test",()=>runAuto("resumen_interno",false)],["ri_run",()=>runAuto("resumen_interno",true)],
- ["rs_save",()=>saveAuto("recordatorio_socios")],["rs_preview",()=>previewAuto("recordatorio_socios")],
- ["rs_test",()=>runAuto("recordatorio_socios",false)],["rs_run",()=>runAuto("recordatorio_socios",true)]
-].forEach(([id,fn])=>$(id).addEventListener("click",fn));
 
 if (token) enterApp();
 </script>

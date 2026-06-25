@@ -126,6 +126,7 @@ def estado_cuotas(anio: int) -> dict:
             "meses": meses,
             "pagos": pagos,
             "debe": debe,
+            "impagos": [x["mes"] for x in meses if x["estado"] == "debe" and x["vencido"]],
             "estado": "al_dia" if debe == 0 else "debe",
         })
 
