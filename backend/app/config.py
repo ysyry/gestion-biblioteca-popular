@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # esta clave solo firma el token de sesión que emite la app).
     app_secret_key: str = "dev-insecure-secret"
     app_token_expire_minutes: int = 480
+    # URL pública de la app (para mostrar el logo en los mails). Ej: https://...up.railway.app
+    app_public_url: str = ""
 
     # CORS
     cors_origins: str = "http://localhost:5173"

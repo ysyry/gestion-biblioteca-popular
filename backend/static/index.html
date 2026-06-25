@@ -90,6 +90,14 @@
   .auto-actions .btn-sec { font-size:.85rem; }
   .varhint { font-size:.76rem; color:var(--muted); margin:.3rem 0 0; }
   .varhint code { background:#f3eef8; color:var(--magenta); border-radius:5px; padding:.05rem .3rem; }
+  .auto-test { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin:.7rem 0; }
+  .auto-test input { width:auto; flex:1; min-width:160px; max-width:280px; }
+  .btn-sec.danger { color:var(--red); border-color:#f3c2cc; }
+  .btn-sec.danger:hover { background:#fbe4e8; }
+  .mailmock { border:1px solid var(--line); border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(20,30,60,.06); }
+  .mailmock .mm-head { background:#f7f8fa; padding:.7rem .9rem; border-bottom:1px solid var(--line); }
+  .mailmock .mm-head b { color:var(--navy); }
+  .mailmock .mm-body { padding:.9rem; white-space:pre-wrap; font-size:.9rem; line-height:1.55; }
 
   /* Estadísticas (dashboard) */
   .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:1rem; margin-bottom:1.5rem; }
@@ -200,6 +208,9 @@
   /* Cuotas */
   .cuotas-toolbar { display:flex; flex-wrap:wrap; gap:.7rem 1rem; align-items:center; margin-bottom:1.1rem; }
   .cuotas-toolbar .grow { flex:1; min-width:160px; }
+  .cuotas-toolbar .meta { margin:0; }                 /* sin margin-top: alinea con el resto */
+  .cuotas-toolbar .subtabs { margin-bottom:0; }       /* el segmentado al mismo nivel */
+  .cuotas-toolbar select { padding:.42rem .6rem; border:1px solid var(--line); border-radius:8px; font-family:inherit; }
   .cuotas-table { width:100%; border-collapse:collapse; font-size:.84rem; }
   .cuotas-table th, .cuotas-table td { padding:.4rem .45rem; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
   .cuotas-table th { color:var(--muted); font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; font-weight:600; }
@@ -452,9 +463,6 @@
       </div>
 
       <!-- Vista de listado -->
-      <!-- Cruce de datos (en la pestaña Socios) -->
-      <div id="cruceSection" class="hide"></div>
-
       <div id="listView" class="card">
         <div id="loansSubtabs" class="subtabs hide">
           <button data-sub="todos" class="active">Todos</button>
@@ -471,6 +479,9 @@
         <div id="tableWrap">Cargando…</div>
         <div class="meta" id="rowCount"></div>
       </div>
+
+      <!-- Cruce de datos (debajo del buscador, en la pestaña Socios) -->
+      <div id="cruceSection" class="hide"></div>
 
       <!-- Ficha del socio -->
       <div id="fichaView" class="card hide"></div>
@@ -558,10 +569,14 @@
           <textarea id="ri_footer" rows="2"></textarea>
           <div class="auto-actions">
             <button class="primary" style="width:auto;margin:0" id="ri_save">Guardar</button>
-            <button class="btn-sec" id="ri_preview">Vista previa</button>
-            <button class="btn-sec" id="ri_test">Probar (a una dirección)</button>
-            <button class="btn-sec" id="ri_run">Enviar ahora</button>
+            <button class="btn-sec" id="ri_preview">👁 Ver cómo llega</button>
           </div>
+          <div class="auto-test">
+            <span class="meta">Probar el envío a:</span>
+            <input id="ri_testto" placeholder="tu@email.com" />
+            <button class="btn-sec" id="ri_test">Enviar prueba</button>
+          </div>
+          <div class="auto-actions"><button class="btn-sec danger" id="ri_run">Enviar ahora a destinatarios reales</button></div>
           <div id="ri_result" style="margin-top:.8rem"></div>
         </div>
 
@@ -593,10 +608,14 @@
           <textarea id="rs_footer" rows="2"></textarea>
           <div class="auto-actions">
             <button class="primary" style="width:auto;margin:0" id="rs_save">Guardar</button>
-            <button class="btn-sec" id="rs_preview">Vista previa</button>
-            <button class="btn-sec" id="rs_test">Probar (a una dirección)</button>
-            <button class="btn-sec" id="rs_run">Enviar ahora</button>
+            <button class="btn-sec" id="rs_preview">👁 Ver cómo llega</button>
           </div>
+          <div class="auto-test">
+            <span class="meta">Probar el envío a:</span>
+            <input id="rs_testto" placeholder="tu@email.com" />
+            <button class="btn-sec" id="rs_test">Enviar prueba</button>
+          </div>
+          <div class="auto-actions"><button class="btn-sec danger" id="rs_run">Enviar ahora a destinatarios reales</button></div>
           <div id="rs_result" style="margin-top:.8rem"></div>
         </div>
       </div>
@@ -1267,6 +1286,7 @@ function agDayDetail(day){
 }
 async function renderAgendaWidget(){
   const box=$("agendaWidget"); if(!box) return;
+  box.innerHTML='<h3>Próximas actividades</h3><div class="loadbar" style="margin:.4rem 0"><span></span></div>';
   try {
     const r=await api("/api/agenda?dias=60");
     if(!r.configured || !r.events.length){ box.remove(); return; }
@@ -1467,18 +1487,24 @@ async function saveAuto(job, silent){
     if(!silent) autoRes(job).innerHTML=okMsg("Configuración guardada."); }
   catch(err){ if(!silent) autoRes(job).innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
 }
+function mailMock(de, para, subject, body){
+  return `<div class="mailmock">
+    <div class="mm-head"><div><b>${esc(subject||"(sin asunto)")}</b></div>
+      <div class="meta">De: ${esc(de||"Biblioteca")} &nbsp;·&nbsp; Para: ${esc(para||"—")}</div></div>
+    <div class="mm-body">${esc(body||"")}</div></div>`;
+}
 async function previewAuto(job){
   const res=autoRes(job); res.innerHTML="Calculando…";
   await saveAuto(job, true);
   try {
     const d=await api("/api/auto/preview/"+job);
     if(job==="resumen_interno"){
-      res.innerHTML=`<div class="meta">Destino: <b>${esc(d.to||"(remitente)")}</b> · vencidos: ${d.stats.vencidos} · por vencer: ${d.stats.por_vencer} · socios que deben: ${d.stats.socios_deben}</div>
-        <div class="preview"><b>Asunto:</b> ${esc(d.subject)}\n\n${esc(d.body)}</div>`;
+      res.innerHTML=`<div class="meta" style="margin-bottom:.4rem">Así llegaría el resumen · vencidos: ${d.stats.vencidos} · por vencer: ${d.stats.por_vencer} · socios que deben: ${d.stats.socios_deben}</div>`
+        + mailMock("Biblioteca Osvaldo Bayer", d.to||"(remitente)", d.subject, d.body);
     } else {
       const s=d.sample;
-      res.innerHTML=`<div class="meta">Socios a notificar: <b>${d.total}</b> · con email: ${d.con_email} · sin email: ${d.sin_email}</div>`+
-        (s?`<div class="preview"><b>Ejemplo (${esc(s.email||"sin email")}) — Asunto:</b> ${esc(s.subject)}\n\n${esc(s.body)}</div>`
+      res.innerHTML=`<div class="meta" style="margin-bottom:.4rem">Llegaría a <b>${d.total}</b> socio(s) · con email: ${d.con_email} · sin email: ${d.sin_email}. Ejemplo de cómo lo recibiría el primero:</div>`+
+        (s? mailMock("Biblioteca Osvaldo Bayer", s.email||"sin email", s.subject, s.body)
            :'<p class="empty">Ningún socio cumple los criterios ahora.</p>');
     }
   } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
@@ -1486,7 +1512,10 @@ async function previewAuto(job){
 async function runAuto(job, real){
   const res=autoRes(job);
   let test_to=null;
-  if(!real){ test_to=prompt("Dirección para la prueba (se manda TODO a ese correo):",""); if(!test_to) return; }
+  if(!real){
+    test_to=$(job==="resumen_interno"?"ri_testto":"rs_testto").value.trim();
+    if(!test_to){ res.innerHTML='<div class="msg error">Escribí una dirección de prueba.</div>'; return; }
+  }
   else if(!confirm("Vas a ENVIAR de verdad ahora a los destinatarios reales. ¿Confirmás?")) return;
   await saveAuto(job, true);
   res.innerHTML="Enviando…";

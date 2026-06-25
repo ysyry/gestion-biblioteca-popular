@@ -126,6 +126,9 @@ def _build_resumen_vars(rows: list[dict], cfg: dict) -> tuple[dict, dict]:
     def lp(r):
         return f"• {nombre(r)} — {r.get('title') or r.get('barcode') or '(sin título)'} (vence {_d(r.get('date_due'))}, en {-_dias(r)} días)"
 
+    def titulo(r):
+        return r.get("title") or r.get("barcode") or "(sin título)"
+
     socios_deben = len({r.get("cardnumber") for r in venc if r.get("cardnumber")})
     vars = {
         "fecha": date.today().isoformat(),
@@ -136,18 +139,30 @@ def _build_resumen_vars(rows: list[dict], cfg: dict) -> tuple[dict, dict]:
         "lista_vencidos": "\n".join(lv(r) for r in venc) or "ninguno",
         "lista_por_vencer": "\n".join(lp(r) for r in porv) or "ninguno",
     }
+    html_blocks = {
+        "lista_vencidos": mail.html_table(
+            ["Socio", "Libro", "Venció", "Atraso"],
+            [[nombre(r), titulo(r), _d(r.get("date_due")), f"{_dias(r)} días"] for r in venc]),
+        "lista_por_vencer": mail.html_table(
+            ["Socio", "Libro", "Vence", "Falta"],
+            [[nombre(r), titulo(r), _d(r.get("date_due")), f"{-_dias(r)} días"] for r in porv]),
+    }
     stats = {"vencidos": len(venc), "por_vencer": len(porv), "socios_deben": socios_deben}
-    return vars, stats
+    return vars, html_blocks, stats
 
 
 async def build_resumen(cfg: dict) -> dict:
     rows = await _all_loans()
-    vars, stats = _build_resumen_vars(rows, cfg)
+    vars, html_blocks, stats = _build_resumen_vars(rows, cfg)
     footer = ("\n\n" + cfg["footer"]) if cfg.get("footer") else ""
     return {
         "to": (cfg.get("to") or "").strip() or settings.smtp_from or settings.smtp_user,
-        "subject": mail.render(cfg["subject"], vars),
-        "body": mail.render(cfg["body"], vars) + footer,
+        "subject_tpl": cfg["subject"],
+        "body_tpl": cfg["body"] + footer,
+        "vars": vars,
+        "html": html_blocks,
+        "subject": mail.render(cfg["subject"], vars),       # para la vista previa
+        "body": mail.render(cfg["body"], vars) + footer,    # texto plano (preview)
         "stats": stats,
     }
 
@@ -158,8 +173,8 @@ async def run_resumen(cfg: dict, test_to: str | None = None) -> dict:
     if not to:
         raise RuntimeError("No hay dirección destino (configurá 'A qué correo' o SMTP_FROM).")
     res = await mail.send_campaign(
-        data["subject"], data["body"],
-        [{"email": to, "vars": {}, "subject": None, "body": None}],
+        data["subject_tpl"], data["body_tpl"],
+        [{"email": to, "vars": data["vars"], "subject": None, "body": None, "html": data["html"]}],
         dry_run=False, test_to=None,
     )
     return {"sent_to": to, "stats": data["stats"], "result": res}
@@ -179,11 +194,14 @@ def _build_recordatorio_recipients(rows: list[dict], cfg: dict) -> dict:
             continue
         by.setdefault(c, {"info": r, "loans": []})["loans"].append(r)
 
+    def tit(l):
+        return l.get("title") or l.get("barcode") or "(sin título)"
+
     def fv(l):
-        return f"• {l.get('title') or l.get('barcode') or '(sin título)'} (venció {_d(l.get('date_due'))})"
+        return f"• {tit(l)} (venció {_d(l.get('date_due'))})"
 
     def fp(l):
-        return f"• {l.get('title') or l.get('barcode') or '(sin título)'} (vence {_d(l.get('date_due'))})"
+        return f"• {tit(l)} (vence {_d(l.get('date_due'))})"
 
     recipients = []
     for c, g in by.items():
@@ -201,6 +219,10 @@ def _build_recordatorio_recipients(rows: list[dict], cfg: dict) -> dict:
                 "por_vencer": "\n".join(fp(l) for l in porv) or "ninguno",
                 "cantidad_vencidos": str(len(venc)),
                 "cantidad_por_vencer": str(len(porv)),
+            },
+            "html": {
+                "vencidos": mail.html_table(["Libro", "Venció"], [[tit(l), _d(l.get("date_due"))] for l in venc]),
+                "por_vencer": mail.html_table(["Libro", "Vence"], [[tit(l), _d(l.get("date_due"))] for l in porv]),
             },
             "subject": None, "body": None,
         })
