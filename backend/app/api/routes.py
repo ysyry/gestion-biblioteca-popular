@@ -19,7 +19,22 @@ from .. import mail
 from .. import auto_mail
 from .. import agenda
 from .. import cuotas
+from .. import cache
 from ..config import settings
+
+# TTL (segundos) por tipo de dato. Lo que cambia rápido, caché corto.
+TTL_LOANS = 120        # préstamos vigentes (cambian durante el día)
+TTL_CATALOG = 3600     # catálogo (cambia día a día)
+TTL_HEAVY = 1800       # estrategia / histórico (datos históricos)
+TTL_CRUCE = 900        # cruce Koha↔planilla
+TTL_AGENDA = 1800      # agenda (eventos cambian lento)
+
+
+async def _loans_contact_cached(repo: KohaRepository, fresh: bool = False):
+    """Préstamos vigentes con caché compartido (lo usan préstamos, stats y cruce)."""
+    if fresh:
+        cache.invalidate("loans_contact")
+    return await cache.cached("loans_contact", TTL_LOANS, repo.loans_contact)
 from ..koha.client import KohaError
 from ..koha.reports import KohaRepository
 from ..schemas import LoginRequest, LoginResponse, MailSendRequest
@@ -62,12 +77,12 @@ async def loans_overdue(repo: KohaRepository = Depends(get_repository)):
 
 
 @router.get("/loans/contact", tags=["loans"])
-async def loans_contact(repo: KohaRepository = Depends(get_repository)):
+async def loans_contact(fresh: bool = Query(False), repo: KohaRepository = Depends(get_repository)):
     """Todos los préstamos vigentes con contacto y días respecto del vencimiento.
 
     dias_atraso > 0 → vencido; = 0 → vence hoy; < 0 → por vencer (faltan N días).
     """
-    return await repo.loans_contact()
+    return await _loans_contact_cached(repo, fresh)
 
 
 # ── Estadísticas ────────────────────────────────────────────────────────────
@@ -79,9 +94,9 @@ def _dias_int(r) -> int | None:
 
 
 @router.get("/stats", tags=["stats"])
-async def stats(repo: KohaRepository = Depends(get_repository)):
+async def stats(fresh: bool = Query(False), repo: KohaRepository = Depends(get_repository)):
     """KPIs calculados sobre los préstamos vigentes (reporte loans_contact)."""
-    rows = await repo.loans_contact()
+    rows = await _loans_contact_cached(repo, fresh)
     total = len(rows)
     vencidos = [r for r in rows if (_dias_int(r) or 0) > 0]
     por_vencer = [r for r in rows if _dias_int(r) is not None and _dias_int(r) <= 0]
@@ -159,8 +174,14 @@ def _num(v) -> int:
 
 
 @router.get("/stats/catalog", tags=["stats"])
-async def stats_catalog(repo: KohaRepository = Depends(get_repository)):
+async def stats_catalog(fresh: bool = Query(False), repo: KohaRepository = Depends(get_repository)):
     """KPIs del catálogo (ejemplares, títulos, circulación, tipos, colecciones)."""
+    if fresh:
+        cache.invalidate("stats_catalog")
+    return await cache.cached("stats_catalog", TTL_CATALOG, lambda: _stats_catalog(repo))
+
+
+async def _stats_catalog(repo: KohaRepository):
     async def q(sql):
         try:
             return await repo.run_sql(sql)
@@ -195,6 +216,7 @@ async def stats_catalog(repo: KohaRepository = Depends(get_repository)):
 async def stats_historico(
     desde: str | None = Query(None, description="YYYY-MM-DD"),
     hasta: str | None = Query(None, description="YYYY-MM-DD"),
+    fresh: bool = Query(False),
     repo: KohaRepository = Depends(get_repository),
 ):
     """Estadísticas de circulación (tabla statistics) en un rango de fechas."""
@@ -207,6 +229,13 @@ async def stats_historico(
         raise HTTPException(status_code=400, detail="Fechas inválidas (YYYY-MM-DD).") from exc
     if d1 > d2:
         d1, d2 = d2, d1
+    key = f"hist:{d1.isoformat()}:{d2.isoformat()}"
+    if fresh:
+        cache.invalidate(key)
+    return await cache.cached(key, TTL_HEAVY, lambda: _stats_historico(repo, d1, d2))
+
+
+async def _stats_historico(repo: KohaRepository, d1, d2):
     # Fechas re-serializadas desde objetos date -> seguras para interpolar.
     rango = f"s.datetime >= '{d1.isoformat()} 00:00:00' AND s.datetime <= '{d2.isoformat()} 23:59:59'"
 
@@ -256,8 +285,14 @@ async def stats_historico(
 
 
 @router.get("/stats/estrategia", tags=["stats"])
-async def stats_estrategia(repo: KohaRepository = Depends(get_repository)):
+async def stats_estrategia(fresh: bool = Query(False), repo: KohaRepository = Depends(get_repository)):
     """Panel estratégico: crecimiento, socios, estacionalidad y antigüedad del acervo."""
+    if fresh:
+        cache.invalidate("estrategia")
+    return await cache.cached("estrategia", TTL_HEAVY, lambda: _stats_estrategia(repo))
+
+
+async def _stats_estrategia(repo: KohaRepository):
     async def q(sql):
         try:
             return await repo.run_sql(sql)
@@ -387,6 +422,7 @@ async def mail_send(body: MailSendRequest, _: str = Depends(get_current_username
 async def agenda_events(
     desde: str | None = Query(None, description="YYYY-MM-DD (por defecto hoy)"),
     dias: int = Query(90, ge=1, le=400),
+    fresh: bool = Query(False),
     _: str = Depends(get_current_username),
 ):
     """Eventos del calendario de la biblioteca, desde 'desde' por 'dias' días."""
@@ -398,8 +434,11 @@ async def agenda_events(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Fecha inválida (YYYY-MM-DD).") from exc
     d2 = d1 + _dt.timedelta(days=dias)
+    key = f"agenda:{d1.isoformat()}:{d2.isoformat()}"
+    if fresh:
+        cache.invalidate(key)
     try:
-        evs = await agenda.events(d1, d2)
+        evs = await cache.cached(key, TTL_AGENDA, lambda: agenda.events(d1, d2))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"No se pudo leer el calendario: {exc}") from exc
     return {"configured": True, "desde": d1.isoformat(), "hasta": d2.isoformat(),
@@ -410,12 +449,16 @@ async def agenda_events(
 @router.get("/cuotas", tags=["cuotas"])
 async def cuotas_estado(
     anio: int = Query(None, description="Año (por defecto el más reciente)"),
+    fresh: bool = Query(False),
     _: str = Depends(get_current_username),
 ):
     """Estado de cuotas de todos los socios para un año."""
     if not cuotas.configured():
         return {"configured": False}
     import asyncio
+    if fresh:
+        cuotas.clear_cache()
+        cache.invalidate("cruce_members")  # el cruce depende de la planilla
     try:
         data = await asyncio.to_thread(cuotas.estado_cuotas, anio or max(cuotas.anios_disponibles()))
     except Exception as exc:  # noqa: BLE001
@@ -431,7 +474,8 @@ def _norm_id(x) -> str:
 
 
 @router.get("/cruce", tags=["cuotas"])
-async def cruce(repo: KohaRepository = Depends(get_repository), _: str = Depends(get_current_username)):
+async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_repository),
+                _: str = Depends(get_current_username)):
     """Cruza socios de Koha (actividad de préstamo) con la planilla de cuotas (matrícula=carnet)."""
     if not cuotas.configured():
         return {"configured": False}
@@ -440,7 +484,9 @@ async def cruce(repo: KohaRepository = Depends(get_repository), _: str = Depends
       (SELECT COUNT(*) FROM statistics s WHERE s.borrowernumber=br.borrowernumber
         AND s.type='issue' AND s.datetime >= NOW() - INTERVAL 1 YEAR) AS l12
       FROM borrowers br"""
-    koha = await repo.run_sql(sql)
+    if fresh:
+        cache.invalidate("cruce_members")
+    koha = await cache.cached("cruce_members", TTL_CRUCE, lambda: repo.run_sql(sql))
     data = await asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles()))
 
     koha_by = {_norm_id(r["cardnumber"]): r for r in koha if r.get("cardnumber")}

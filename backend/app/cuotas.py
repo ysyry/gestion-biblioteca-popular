@@ -76,6 +76,10 @@ def _read_rows() -> list[list[str]]:
     return rows
 
 
+def clear_cache() -> None:
+    _CACHE["rows"] = None
+
+
 def anios_disponibles() -> list[int]:
     return sorted(YEAR_BLOCKS.keys(), reverse=True)
 

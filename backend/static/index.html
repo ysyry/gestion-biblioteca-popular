@@ -112,6 +112,10 @@
   .bar-fill { height:100%; background:linear-gradient(90deg,#6f86cf,#2a3f86); border-radius:99px; }
   .stats-h { color:var(--navy); font-size:1.12rem; font-weight:700; margin:1.9rem 0 1rem; }
   .stats-h:first-child { margin-top:.2rem; }
+  .btn-refresh { float:right; background:#fff; border:1px solid var(--line); color:var(--muted);
+    border-radius:8px; padding:.3rem .7rem; cursor:pointer; font-family:inherit; font-size:.8rem; font-weight:500; }
+  .btn-refresh:hover { border-color:var(--magenta); color:var(--magenta); }
+  .btn-refresh.spin { opacity:.6; pointer-events:none; }
 
   /* Agenda de actividades */
   .ev { display:flex; gap:1rem; align-items:stretch; padding:.7rem 0; border-bottom:1px solid var(--line); }
@@ -994,14 +998,15 @@ function hbarOpts(rows, color){
     plotOptions:{ bar:{ horizontal:true, borderRadius:5, barHeight:'62%', distributed:false } },
     grid:{ show:false }, legend:{show:false}, tooltip:{ y:{ formatter:v=>miles(v) } } };
 }
-async function loadStats(){
+async function loadStats(fresh){
   const el=$("statsContent"); el.innerHTML=LOADER; destroyCharts();
+  const fq = fresh ? "?fresh=1" : "";
   try {
-    const s=await api("/api/stats");
+    const s=await api("/api/stats"+fq);
     const b=s.buckets;
     el.innerHTML=`
       <div id="agendaWidget" class="card stats-full" style="margin-bottom:1.4rem"></div>
-      <h2 class="stats-h">Préstamos</h2>
+      <h2 class="stats-h"><button class="btn-refresh" onclick="loadStats(true)">↻ Actualizar</button>Préstamos</h2>
       <div class="kpi-grid">
         ${statKpi(s.total_vigentes,"Préstamos activos")}
         ${statKpi(s.vencidos,"Vencidos","warn")}
@@ -1026,7 +1031,7 @@ async function loadStats(){
     mkChart('#chTopSoc', hbarOpts(s.top_socios, '#861E92'));
     renderAgendaWidget();
     try {
-      const c=await api("/api/stats/catalog");
+      const c=await api("/api/stats/catalog"+fq);
       const circ=[ {label:'Circularon', count:c.ejemplares-c.sin_circular}, {label:'Nunca circularon', count:c.sin_circular} ];
       $("catalogSection").innerHTML=`
         <h2 class="stats-h">Catálogo</h2>
@@ -1070,14 +1075,14 @@ function areaOpts(rows, color, name){
     markers:{ size:0, hover:{size:5} }, grid:{ borderColor:'#eef1f5', strokeDashArray:4 }, legend:{show:false},
     tooltip:{ y:{ formatter:v=>Number(v).toLocaleString('es-AR') } } };
 }
-async function loadEstrategia(){
+async function loadEstrategia(fresh){
   const el=$("estrategiaContent"); el.innerHTML=LOADER; destroyCharts();
   try {
-    const d=await api("/api/stats/estrategia");
+    const d=await api("/api/stats/estrategia"+(fresh?"?fresh=1":""));
     const s=d.socios, a=d.acervo;
     const pctAct = s.total ? Math.round(100*s.activos_12m/s.total) : 0;
     el.innerHTML=`
-      <h2 class="stats-h">Crecimiento de la biblioteca</h2>
+      <h2 class="stats-h"><button class="btn-refresh" onclick="loadEstrategia(true)">↻ Actualizar</button>Crecimiento de la biblioteca</h2>
       <p class="meta" style="margin:.1rem 0 1rem">Préstamos por año (área) y socios activos (línea). Pasá el mouse para ver los valores de cada año.</p>
       <div class="card stats-full"><div id="chGrowth"></div></div>
 
