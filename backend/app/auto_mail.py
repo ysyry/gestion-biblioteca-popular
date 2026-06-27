@@ -140,15 +140,23 @@ async def _all_loans() -> list[dict]:
         await client.aclose()
 
 
+BAJA_CATS = {"B"}        # categoría "de baja" en Koha
+NO_CUOTA_CATS = {"BEC."}  # becados: no pagan cuota
+
+
 async def _members_map() -> dict:
-    """{carnet_norm: {surname, firstname, email}} — para contactar deudores de cuota."""
+    """{carnet_norm: {surname, firstname, email, categorycode}} — contacto + categoría."""
     client = KohaClient(settings.koha_base_url, settings.koha_user, settings.koha_password)
     await client.login()
     try:
-        rows = await client.run_sql("SELECT cardnumber, surname, firstname, email FROM borrowers")
+        rows = await client.run_sql("SELECT cardnumber, surname, firstname, email, categorycode FROM borrowers")
     finally:
         await client.aclose()
     return {_norm(r["cardnumber"]): r for r in rows if r.get("cardnumber")}
+
+
+def _cat(members: dict, carnet: str) -> str:
+    return (members.get(carnet, {}).get("categorycode") or "").strip()
 
 
 async def _cuota_map() -> dict:
@@ -218,7 +226,11 @@ async def build_interno(rep: dict) -> dict:
     if rep.get("incluir_cuotas"):
         umbral = int(rep.get("umbral_cuota", 1))
         cm = await _cuota_map()
-        deud = [s for s in cm.values() if (s.get("debe", 0) or 0) >= umbral]
+        members = await _members_map()
+        # Excluir bajas y becados (no pagan cuota) de la lista de deudores.
+        omit = {c for c, m in members.items()
+                if (m.get("categorycode") or "").strip() in (BAJA_CATS | NO_CUOTA_CATS)}
+        deud = [s for c, s in cm.items() if (s.get("debe", 0) or 0) >= umbral and c not in omit]
         deud.sort(key=lambda s: -s.get("debe", 0))
         vars["total_deudores_cuota"] = str(len(deud))
         vars["lista_cuotas"] = "\n".join(
@@ -271,7 +283,8 @@ async def _socios_recipients(rep: dict) -> dict:
         by.setdefault(_norm(c), {"info": r, "loans": []})["loans"].append(r)
 
     cm = await _cuota_map() if inc_c else {}
-    members = await _members_map() if inc_c else {}
+    members = await _members_map()                 # siempre: para filtrar bajas
+    bajas = {c for c in members if _cat(members, c) in BAJA_CATS}
 
     carnets = set()
     for c, g in by.items():
@@ -281,12 +294,12 @@ async def _socios_recipients(rep: dict) -> dict:
             carnets.add(c)
     if inc_c:
         for c, s in cm.items():
-            if (s.get("debe", 0) or 0) >= umbral_cuota:
+            if (s.get("debe", 0) or 0) >= umbral_cuota and _cat(members, c) not in NO_CUOTA_CATS:
                 carnets.add(c)
 
     recipients = []
     for c in carnets:
-        if c in excluidos:
+        if c in excluidos or c in bajas:           # no escribir a socios de baja
             continue
         g = by.get(c, {"info": {}, "loans": []})
         info = g["info"]

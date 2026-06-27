@@ -405,6 +405,25 @@ async def mail_send(body: MailSendRequest, _: str = Depends(get_current_username
     """
     dry_run = settings.mail_dry_run if body.dry_run is None else body.dry_run
     recipients = [r.model_dump() for r in body.recipients]
+
+    # Enriquece con la deuda de cuota por carnet, así {{meses_debe}}/{{meses_impagos}}
+    # funcionan aunque el socio se haya agregado por búsqueda (no solo desde el cruce).
+    usa_cuota = "{{meses_debe}}" in (body.body or "") or "{{meses_impagos}}" in (body.body or "")
+    if cuotas.configured() and usa_cuota:
+        try:
+            import asyncio
+            data = await asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles()))
+            cmap = {_norm_id(s["matricula"]): s for s in data["socios"] if s.get("matricula")}
+            for r in recipients:
+                v = r.get("vars") or {}
+                s = cmap.get(_norm_id(v.get("carnet")))
+                if s:
+                    v["meses_debe"] = str(s.get("debe", 0))
+                    v["meses_impagos"] = ", ".join(s.get("impagos", [])) or "—"
+                    r["vars"] = v
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo enriquecer cuotas en mail: %s", exc)
+
     try:
         return await mail.send_campaign(
             subject_tpl=body.subject,
@@ -415,6 +434,9 @@ async def mail_send(body: MailSendRequest, _: str = Depends(get_current_username
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # cualquier otro error: 502 con mensaje, nunca 500 crudo
+        logger.exception("mail/send falló")
+        raise HTTPException(status_code=502, detail=f"Error al enviar: {exc}") from exc
 
 
 # ── Agenda de actividades (Google Calendar, solo lectura) ──────────────────────
@@ -480,16 +502,20 @@ async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_r
     if not cuotas.configured():
         return {"configured": False}
     import asyncio
-    sql = """SELECT br.cardnumber, br.surname, br.firstname, br.email,
+    sql = """SELECT br.cardnumber, br.surname, br.firstname, br.email, br.categorycode,
+      c.description AS categoria,
       (SELECT COUNT(*) FROM statistics s WHERE s.borrowernumber=br.borrowernumber
         AND s.type='issue' AND s.datetime >= NOW() - INTERVAL 1 YEAR) AS l12
-      FROM borrowers br"""
+      FROM borrowers br LEFT JOIN categories c ON c.categorycode = br.categorycode"""
     if fresh:
         cache.invalidate("cruce_members")
     koha = await cache.cached("cruce_members", TTL_CRUCE, lambda: repo.run_sql(sql))
     data = await asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles()))
 
-    koha_by = {_norm_id(r["cardnumber"]): r for r in koha if r.get("cardnumber")}
+    # Socios "de baja" en Koha (categoría B). No cuentan ni reciben recordatorios.
+    BAJA = {"B"}
+    koha_by = {_norm_id(r["cardnumber"]): r for r in koha
+               if r.get("cardnumber") and (r.get("categorycode") or "").strip() not in BAJA}
     pl_by = {_norm_id(s["matricula"]): s for s in data["socios"] if s.get("matricula")}
     ks, ps = set(koha_by), set(pl_by)
     inter = ks & ps
@@ -501,20 +527,25 @@ async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_r
         except (TypeError, ValueError):
             return False
 
+    NO_CUOTA = {"BEC."}  # becados no pagan cuota → nunca figuran como deudores
+
     def info(card, s=None):
         k = koha_by.get(card, {})
         return {"carnet": k.get("cardnumber") or (s["matricula"] if s else ""),
                 "apellido": k.get("surname") or (s["apellido"] if s else ""),
                 "nombre": k.get("firstname") or (s["nombre"] if s else ""),
-                "email": k.get("email") or ""}
+                "email": k.get("email") or "",
+                "categoria": k.get("categoria") or (k.get("categorycode") or "")}
 
     # Lista completa de socios que coinciden, con meses adeudados y si retira.
     # El frontend arma la matriz/listas aplicando un umbral configurable de meses.
     matched = []
     for m in inter:
+        k = koha_by[m]
+        becado = (k.get("categorycode") or "").strip() in NO_CUOTA
         d = info(m, pl_by[m])
-        d["debe"] = pl_by[m].get("debe", 0)
-        d["impagos"] = pl_by[m].get("impagos", [])
+        d["debe"] = 0 if becado else pl_by[m].get("debe", 0)
+        d["impagos"] = [] if becado else pl_by[m].get("impagos", [])
         d["retira"] = retira(m)
         matched.append(d)
 

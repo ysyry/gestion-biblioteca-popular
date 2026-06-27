@@ -204,7 +204,8 @@
   .matrix { display:grid; grid-template-columns:auto 1fr 1fr; gap:.5rem; max-width:560px; margin:.4rem 0 .2rem; }
   .matrix .lbl { display:flex; align-items:center; justify-content:center; font-size:.74rem; font-weight:600;
     color:var(--muted); text-transform:uppercase; letter-spacing:.03em; padding:.3rem; }
-  .matrix .cell { border-radius:11px; padding:.9rem; text-align:center; color:#fff; }
+  .matrix .cell { border-radius:11px; padding:.9rem; text-align:center; color:#fff; cursor:pointer; transition:.12s; }
+  .matrix .cell:hover { filter:brightness(1.08); box-shadow:0 2px 8px rgba(20,30,60,.18); }
   .matrix .cell .n { font-size:1.7rem; font-weight:700; line-height:1; }
   .matrix .cell .c { font-size:.74rem; opacity:.92; margin-top:.25rem; }
   .matrix .cell.good { background:#15AA6C; } .matrix .cell.warn { background:#F5821F; }
@@ -1281,21 +1282,14 @@ function renderCruce(){
   const deuda_todos= m.filter(conDeuda).sort((a,b)=>b.debe-a.debe);
   cruceLists={ deuda_ret, aldia_no, deuda_todos, retiran_sin_planilla:d.retiran_sin_planilla };
 
-  const meses = s => `<span class="badge deuda" style="margin-left:.3rem">debe ${s.debe}</span>`;
-  const lista=(titulo,key,arr,conMeses)=>`<div class="cruce-list">
-      <div class="chead" onclick="this.nextElementSibling.classList.toggle('hide')">
-        <b>${titulo} (${arr.length})</b>
-        <span class="pill" onclick="event.stopPropagation();cruceAMails('${key}')">+ Agregar a Mails</span>
-      </div>
-      <div class="cruce-rows hide">${arr.map(p=>`<div class="recip"><span class="who">${esc(p.apellido)}, ${esc(p.nombre)} <small>(${esc(p.carnet)})</small>${conMeses?meses(p):""}${p.email?"":' <span class="noemail">sin email</span>'}</span></div>`).join("")||'<p class="empty">—</p>'}</div>
-    </div>`;
+  cruceLists.aldia_ret=aldia_ret; cruceLists.aldia_no=aldia_no; cruceLists.deuda_ret=deuda_ret; cruceLists.deuda_no=deuda_no;
   const opts=[1,2,3,6].map(n=>`<option value="${n}" ${n===U?'selected':''}>${n} mes${n>1?'es':''}</option>`).join("");
 
   $("cruceSection").innerHTML=`<div class="card">
     <h3 style="margin-top:0">Cruce con la planilla de cuotas (${d.anio})</h3>
-    <p class="meta" style="margin:.1rem 0 1rem">"Retira" = sacó al menos un libro en el último año. Matrícula de la planilla = carnet de Koha.</p>
+    <p class="meta" style="margin:.1rem 0 1rem">"Retira" = sacó al menos un libro en el último año. Matrícula de la planilla = carnet de Koha. No se cuentan los socios de baja; los becados no figuran con deuda de cuota.</p>
     <div class="kpi-grid">
-      ${statKpi(miles(d.koha_total),"Socios en Koha")}
+      ${statKpi(miles(d.koha_total),"Socios activos en Koha")}
       ${statKpi(miles(d.planilla_total),"En la planilla de cuotas")}
       ${statKpi(miles(d.coinciden),"Coinciden (en ambos)","ok")}
       ${statKpi(miles(d.solo_koha),"En Koha, fuera de la planilla","warn")}
@@ -1303,23 +1297,39 @@ function renderCruce(){
     <div class="cuotas-toolbar" style="margin:.2rem 0 .6rem">
       <span style="font-weight:700;color:var(--navy)">Socios que coinciden: ¿al día? ¿retiran?</span>
       <label class="meta">Considerar "con deuda" desde: <select id="cruceUmbral">${opts}</select></label>
+      <span class="meta">(tocá una celda para ver quiénes son)</span>
     </div>
     <div class="matrix">
       <div class="lbl"></div><div class="lbl">Retira libros</div><div class="lbl">No retira</div>
       <div class="lbl">Al día</div>
-      <div class="cell good"><div class="n">${aldia_ret.length}</div><div class="c">al día y retira</div></div>
-      <div class="cell warn"><div class="n">${aldia_no.length}</div><div class="c">al día, no retira</div></div>
+      <div class="cell good" data-k="aldia_ret"><div class="n">${aldia_ret.length}</div><div class="c">al día y retira</div></div>
+      <div class="cell warn" data-k="aldia_no"><div class="n">${aldia_no.length}</div><div class="c">al día, no retira</div></div>
       <div class="lbl">Con deuda</div>
-      <div class="cell bad"><div class="n">${deuda_ret.length}</div><div class="c">retira y debe</div></div>
-      <div class="cell neutral"><div class="n">${deuda_no.length}</div><div class="c">no retira y debe</div></div>
+      <div class="cell bad" data-k="deuda_ret"><div class="n">${deuda_ret.length}</div><div class="c">retira y debe</div></div>
+      <div class="cell neutral" data-k="deuda_no"><div class="n">${deuda_no.length}</div><div class="c">no retira y debe</div></div>
     </div>
-    <p class="meta" style="margin:.2rem 0 .6rem">"Con deuda" = debe ${U} mes${U>1?'es':''} o más de cuota (de los meses ya vencidos). Al agregarlos a Mails, podés usar <code>{{meses_debe}}</code> y <code>{{meses_impagos}}</code> en el mensaje.</p>
-    ${lista("Todos con deuda de cuota","deuda_todos",deuda_todos,true)}
-    ${lista("Retiran libros y deben cuota","deuda_ret",deuda_ret,true)}
-    ${lista("Al día pero no retiran (fieles)","aldia_no",aldia_no,false)}
-    ${lista("Retiran pero no están en la planilla","retiran_sin_planilla",d.retiran_sin_planilla,false)}
+    <div id="cruceDetail"></div>
+    <p class="meta" style="margin:.7rem 0 .4rem">"Con deuda" = debe ${U} mes${U>1?'es':''} o más (de los meses ya vencidos). Para campañas de cuota:</p>
+    <div class="auto-actions">
+      <span class="pill" onclick="cruceShow('deuda_todos')">Ver todos con deuda (${deuda_todos.length})</span>
+      <span class="pill" onclick="cruceShow('retiran_sin_planilla')">Retiran pero no están en la planilla (${d.retiran_sin_planilla.length})</span>
+    </div>
+    <div id="cruceDetail2"></div>
   </div>`;
   $("cruceUmbral").onchange=(e)=>{ cruceUmbral=+e.target.value; renderCruce(); };
+  $("cruceSection").querySelectorAll(".matrix .cell").forEach(c=>c.onclick=()=>cruceShow(c.dataset.k));
+}
+const CRUCE_TITULOS={ aldia_ret:"Al día y retiran", aldia_no:"Al día, no retiran (fieles)", deuda_ret:"Retiran y deben cuota", deuda_no:"No retiran y deben cuota", deuda_todos:"Todos con deuda de cuota", retiran_sin_planilla:"Retiran pero no están en la planilla" };
+function cruceShow(key){
+  const arr=cruceLists[key]||[]; const conDeuda=key.startsWith('deuda');
+  const cont = key==='deuda_todos'||key==='retiran_sin_planilla' ? $("cruceDetail2") : $("cruceDetail");
+  if($("cruceDetail")!==cont) $("cruceDetail").innerHTML=""; else $("cruceDetail2") && ($("cruceDetail2").innerHTML="");
+  const meses = s => `<span class="badge deuda" style="margin-left:.3rem">debe ${s.debe}</span>`;
+  cont.innerHTML=`<div class="cruce-list" style="margin-top:.6rem">
+    <div class="chead"><b>${CRUCE_TITULOS[key]||key} (${arr.length})</b>
+      ${conDeuda?`<span class="pill" onclick="cruceAMails('${key}')">+ Agregar a Mails</span>`:""}</div>
+    <div class="cruce-rows">${arr.map(p=>`<div class="recip"><span class="who">${esc(p.apellido)}, ${esc(p.nombre)} <small>(${esc(p.carnet)})</small>${p.categoria?` <span class="badge gray">${esc(p.categoria)}</span>`:""}${conDeuda&&p.debe?meses(p):""}${p.email?"":' <span class="noemail">sin email</span>'}</span></div>`).join("")||'<p class="empty">Nadie en este grupo.</p>'}</div>
+  </div>`;
 }
 window.cruceAMails=function(key){
   const arr=cruceLists[key]||[]; let n=0;

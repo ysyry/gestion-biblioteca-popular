@@ -100,28 +100,50 @@ def _wrap_html(inner: str) -> str:
 </table></td></tr></table></body></html>"""
 
 
-def _send_sync(messages: list[tuple[str, MIMEMultipart]]) -> list[dict]:
-    """Abre UNA conexión SMTP y manda todos los mensajes. Devuelve resultados."""
-    results: list[dict] = []
+def _smtp_connect():
     server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30)
-    try:
+    server.ehlo()
+    if settings.smtp_use_tls:
+        server.starttls()
         server.ehlo()
-        if settings.smtp_use_tls:
-            server.starttls()
-            server.ehlo()
-        if settings.smtp_user:
-            server.login(settings.smtp_user, settings.smtp_password)
+    if settings.smtp_user:
+        server.login(settings.smtp_user, settings.smtp_password)
+    return server
+
+
+def _send_sync(messages: list[tuple[str, MIMEMultipart]]) -> list[dict]:
+    """Manda todos los mensajes. Resiliente: reconecta cada ~90 envíos (Gmail corta
+    sesiones largas) y reintenta una vez si la conexión se cae. Nunca lanza: si no
+    puede conectar, marca todos como error (para no devolver 500)."""
+    results: list[dict] = []
+    try:
+        server = _smtp_connect()
+    except Exception as exc:  # no se pudo conectar/autenticar
+        detail = f"No se pudo conectar al servidor de correo: {exc}"
+        return [{"email": to, "status": "error", "detail": detail} for to, _ in messages]
+
+    enviados = 0
+    try:
         for to_addr, msg in messages:
             try:
+                if enviados and enviados % 90 == 0:   # refrescar conexión
+                    try: server.quit()
+                    except Exception: pass
+                    server = _smtp_connect()
                 server.sendmail(msg["From"], [to_addr], msg.as_string())
-                results.append({"email": to_addr, "status": "sent", "detail": ""})
-            except Exception as exc:  # un destinatario falla, seguimos con el resto
+                results.append({"email": to_addr, "status": "sent", "detail": ""}); enviados += 1
+            except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, ConnectionError):
+                try:  # reconecta y reintenta una vez
+                    server = _smtp_connect()
+                    server.sendmail(msg["From"], [to_addr], msg.as_string())
+                    results.append({"email": to_addr, "status": "sent", "detail": ""}); enviados += 1
+                except Exception as exc:
+                    results.append({"email": to_addr, "status": "error", "detail": str(exc)})
+            except Exception as exc:   # un destinatario falla, seguimos con el resto
                 results.append({"email": to_addr, "status": "error", "detail": str(exc)})
     finally:
-        try:
-            server.quit()
-        except Exception:
-            pass
+        try: server.quit()
+        except Exception: pass
     return results
 
 
