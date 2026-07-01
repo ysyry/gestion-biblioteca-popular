@@ -111,20 +111,31 @@ def _smtp_connect():
     return server
 
 
-def _send_sync(messages: list[tuple[str, MIMEMultipart]]) -> list[dict]:
-    """Manda todos los mensajes. Resiliente: reconecta cada ~90 envíos (Gmail corta
-    sesiones largas) y reintenta una vez si la conexión se cae. Nunca lanza: si no
-    puede conectar, marca todos como error (para no devolver 500)."""
+def _build_mime(m: dict) -> MIMEMultipart:
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = m["subject"]
+    msg["From"] = m["from"]
+    msg["To"] = m["to"]
+    msg.attach(MIMEText(m["plain"], "plain", "utf-8"))
+    msg.attach(MIMEText(m["html"], "html", "utf-8"))
+    return msg
+
+
+def _send_sync(messages: list[dict]) -> list[dict]:
+    """Manda por SMTP. Resiliente: reconecta cada ~90 envíos (Gmail corta sesiones
+    largas) y reintenta una vez si la conexión se cae. Nunca lanza: si no puede
+    conectar, marca todos como error (para no devolver 500)."""
     results: list[dict] = []
     try:
         server = _smtp_connect()
     except Exception as exc:  # no se pudo conectar/autenticar
         detail = f"No se pudo conectar al servidor de correo: {exc}"
-        return [{"email": to, "status": "error", "detail": detail} for to, _ in messages]
+        return [{"email": m["to"], "status": "error", "detail": detail} for m in messages]
 
     enviados = 0
     try:
-        for to_addr, msg in messages:
+        for m in messages:
+            to_addr = m["to"]; msg = _build_mime(m)
             try:
                 if enviados and enviados % 90 == 0:   # refrescar conexión
                     try: server.quit()
@@ -147,6 +158,27 @@ def _send_sync(messages: list[tuple[str, MIMEMultipart]]) -> list[dict]:
     return results
 
 
+def _send_resend(messages: list[dict]) -> list[dict]:
+    """Manda por la API HTTPS de Resend (funciona en Railway, que bloquea SMTP)."""
+    import httpx
+    results: list[dict] = []
+    headers = {"Authorization": f"Bearer {settings.resend_api_key}", "Content-Type": "application/json"}
+    with httpx.Client(timeout=30) as client:
+        for m in messages:
+            payload = {"from": m["from"], "to": [m["to"]], "subject": m["subject"],
+                       "html": m["html"], "text": m["plain"]}
+            try:
+                r = client.post("https://api.resend.com/emails", json=payload, headers=headers)
+                if r.status_code in (200, 201):
+                    results.append({"email": m["to"], "status": "sent", "detail": ""})
+                else:
+                    results.append({"email": m["to"], "status": "error",
+                                    "detail": f"Resend {r.status_code}: {r.text[:160]}"})
+            except Exception as exc:  # noqa: BLE001
+                results.append({"email": m["to"], "status": "error", "detail": str(exc)})
+    return results
+
+
 async def send_campaign(
     subject_tpl: str,
     body_tpl: str,
@@ -158,8 +190,10 @@ async def send_campaign(
        email, vars (dict), subject (override|None), body (override|None),
        html (dict opcional var->HTML para listas que llegan como tabla).
     """
-    from_addr = settings.smtp_from or settings.smtp_user
-    prepared: list[tuple[str, MIMEMultipart]] = []
+    provider = (settings.mail_provider or "smtp").lower()
+    from_addr = (settings.mail_from if provider == "resend" else "") or settings.smtp_from or settings.smtp_user
+    from_hdr = formataddr((settings.smtp_from_name, from_addr))
+    prepared: list[dict] = []
     results: list[dict] = []
 
     for r in recipients:
@@ -171,23 +205,24 @@ async def send_campaign(
                             "detail": "socio sin email", "nombre": nombre})
             continue
         tpl = r.get("body") or body_tpl
-        subject = render(r.get("subject") or subject_tpl, variables)
-        body_plain = render(tpl, variables)
-        body_html = _wrap_html(render_html(tpl, variables, r.get("html")))
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = formataddr((settings.smtp_from_name, from_addr))
-        msg["To"] = to_addr
-        msg.attach(MIMEText(body_plain, "plain", "utf-8"))
-        msg.attach(MIMEText(body_html, "html", "utf-8"))
-        prepared.append((to_addr, msg))
+        prepared.append({
+            "to": to_addr, "from": from_hdr,
+            "subject": render(r.get("subject") or subject_tpl, variables),
+            "plain": render(tpl, variables),
+            "html": _wrap_html(render_html(tpl, variables, r.get("html"))),
+        })
 
     if dry_run:
-        for to_addr, msg in prepared:
-            results.append({"email": to_addr, "status": "simulado",
-                            "detail": "DRY RUN (no se envió)", "subject": msg["Subject"]})
+        for m in prepared:
+            results.append({"email": m["to"], "status": "simulado",
+                            "detail": "DRY RUN (no se envió)", "subject": m["subject"]})
         enviados = 0
+    elif provider == "resend":
+        if not settings.resend_api_key:
+            raise RuntimeError("Falta RESEND_API_KEY.")
+        sent_results = await asyncio.to_thread(_send_resend, prepared)
+        results.extend(sent_results)
+        enviados = sum(1 for x in sent_results if x["status"] == "sent")
     else:
         if not settings.smtp_host:
             raise RuntimeError("SMTP no configurado (completá SMTP_HOST en .env).")

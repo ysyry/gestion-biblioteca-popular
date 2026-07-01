@@ -38,14 +38,19 @@ async def test_send_campaign_omite_sin_email():
 
 
 async def test_send_campaign_real_usa_send_sync(monkeypatch):
+    monkeypatch.setattr(mail.settings, "mail_provider", "smtp")
     monkeypatch.setattr(mail.settings, "smtp_host", "smtp.test")
     enviados = {}
     def fake(msgs):
         enviados["n"] = len(msgs)
-        return [{"email": to, "status": "sent", "detail": ""} for to, _ in msgs]
+        return [{"email": m["to"], "status": "sent", "detail": ""} for m in msgs]
     monkeypatch.setattr(mail, "_send_sync", fake)
     res = await mail.send_campaign("S", "Hola {{nombre}}", [{"email": "a@b.com", "vars": {"nombre": "Ana"}}], dry_run=False)
     assert res["enviados"] == 1 and enviados["n"] == 1
+
+
+def _msg(to):
+    return {"to": to, "from": "x@y.com", "subject": "s", "plain": "p", "html": "<p>h</p>"}
 
 
 def test_send_sync_no_revienta_si_no_conecta(monkeypatch):
@@ -53,6 +58,21 @@ def test_send_sync_no_revienta_si_no_conecta(monkeypatch):
     def boom():
         raise smtplib.SMTPConnectError(421, "no conecta")
     monkeypatch.setattr(mail, "_smtp_connect", boom)
-    res = mail._send_sync([("a@b.com", object()), ("c@d.com", object())])
+    res = mail._send_sync([_msg("a@b.com"), _msg("c@d.com")])
     assert len(res) == 2
     assert all(r["status"] == "error" for r in res)
+
+
+async def test_send_campaign_resend(monkeypatch):
+    # Con provider=resend usa la API HTTPS (no SMTP).
+    monkeypatch.setattr(mail.settings, "mail_provider", "resend")
+    monkeypatch.setattr(mail.settings, "resend_api_key", "re_test")
+    monkeypatch.setattr(mail.settings, "mail_from", "biblioteca@dominio.org")
+    usados = {}
+    def fake(msgs):
+        usados["from"] = msgs[0]["from"]
+        return [{"email": m["to"], "status": "sent", "detail": ""} for m in msgs]
+    monkeypatch.setattr(mail, "_send_resend", fake)
+    res = await mail.send_campaign("S", "B", [{"email": "a@b.com", "vars": {}}], dry_run=False)
+    assert res["enviados"] == 1
+    assert "biblioteca@dominio.org" in usados["from"]

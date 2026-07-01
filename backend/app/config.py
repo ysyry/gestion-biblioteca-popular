@@ -58,7 +58,12 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:5173"
 
-    # ── Envío de mails (SMTP) ───────────────────────────────────────────────
+    # ── Envío de mails ──────────────────────────────────────────────────────
+    # Proveedor: "smtp" (Gmail, local) o "resend" (API HTTPS, funciona en Railway).
+    mail_provider: str = "smtp"
+    resend_api_key: str = ""
+    mail_from: str = ""               # remitente para Resend (ej: biblioteca@bibliotecabayer.org.ar)
+    # SMTP (local / Gmail)
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
