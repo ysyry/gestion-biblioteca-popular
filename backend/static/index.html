@@ -73,8 +73,26 @@
   textarea { resize:vertical; }
   button.primary { margin-top:1.1rem; width:100%; background:var(--magenta); color:#fff; border:none;
           padding:.7rem; border-radius:9px; font-size:.95rem; cursor:pointer; font-weight:600; font-family:inherit; }
-  button.primary:hover { background:var(--magenta-d); }
-  button.primary:disabled { opacity:.6; cursor:default; }
+  button.primary:hover { background:var(--magenta-d); box-shadow:0 3px 10px rgba(134,30,146,.28); }
+  button.primary:disabled { opacity:.6; cursor:default; box-shadow:none; }
+
+  /* ── Feedback de interacción: todos los botones reaccionan al hover/press ── */
+  button { transition:background .12s, box-shadow .14s, transform .07s, filter .12s, border-color .12s, color .12s; }
+  button:not(:disabled):hover { filter:brightness(1.02); }
+  button:not(:disabled):active { transform:translateY(1px) scale(.99); }
+  button:disabled { cursor:default; }
+  button:focus-visible { outline:2px solid var(--magenta); outline-offset:2px; }
+  /* Spinner inline reutilizable dentro de botones y mensajes */
+  .spin-ring { display:inline-block; width:1em; height:1em; vertical-align:-.15em;
+          border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
+          animation:spinr .6s linear infinite; }
+  @keyframes spinr { to { transform:rotate(360deg); } }
+  button.is-busy { position:relative; pointer-events:none; opacity:.9; }
+  .busy-line { display:inline-flex; align-items:center; gap:.55rem; color:var(--navy); font-weight:600;
+          font-size:.9rem; padding:.5rem 0; }
+  .busy-line small { color:var(--muted); font-weight:400; }
+  @keyframes bpulse { 0%,100%{ opacity:1 } 50%{ opacity:.55 } }
+  .busy-line .dots { animation:bpulse 1.1s ease-in-out infinite; }
 
   /* ── Toolbar / búsqueda ────────────────────────────────────────────────── */
   /* Formularios de automáticos */
@@ -585,6 +603,22 @@ function msg(el,t,k){ el.innerHTML = t ? `<div class="msg ${k}">${t}</div>` : ""
 function money(v){ const n=Number(v); if(Number.isNaN(n)) return v??""; return "$"+n.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fecha(v){ return v ? String(v).slice(0,10) : ""; }
 function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+// Pone un botón en estado "ocupado" (spinner + texto) y devuelve una función para restaurarlo.
+function btnBusy(btn, label){
+  if(!btn) return ()=>{};
+  const prev=btn.innerHTML, wasDisabled=btn.disabled;
+  btn.dataset._w=btn.offsetWidth+"px";           // fija el ancho para que no salte
+  btn.style.minWidth=btn.dataset._w;
+  btn.classList.add("is-busy"); btn.disabled=true;
+  btn.innerHTML=`<span class="spin-ring"></span> ${esc(label||"Procesando…")}`;
+  return ()=>{ btn.classList.remove("is-busy"); btn.disabled=wasDisabled;
+               btn.innerHTML=prev; btn.style.minWidth=""; };
+}
+// Línea de "trabajando…" con spinner para zonas de resultado (ops que tardan).
+function busyLine(text, hint){
+  return `<div class="busy-line"><span class="spin-ring"></span><span class="dots">${esc(text)}</span>`+
+         (hint?`<small>${esc(hint)}</small>`:"")+`</div>`;
+}
 // Confirmación con UI propia (reemplaza al confirm() del navegador). Devuelve Promise<bool>.
 function uiConfirm({title="Confirmar", message="", ok="Confirmar", danger=false}={}){
   return new Promise(resolve=>{
@@ -680,7 +714,9 @@ $("memberSearchBtn").addEventListener("click", searchMembers);
 $("memberQuery").addEventListener("keydown",(e)=>{ if(e.key==="Enter") searchMembers(); });
 async function searchMembers(){
   const q=$("memberQuery").value.trim(); if(!q) return;
-  await load("/api/members?q="+encodeURIComponent(q), MEMBER_COLS, true);
+  const restore=btnBusy($("memberSearchBtn"),"Buscando…");
+  try { await load("/api/members?q="+encodeURIComponent(q), MEMBER_COLS, true); }
+  finally { restore(); }
 }
 
 // ── Columnas ──
@@ -855,7 +891,8 @@ window.addFromSearch=async function(s){
 
 async function mailDoSearch(){
   const q=$("mailSearch").value.trim(); if(!q) return;
-  const wrap=$("mailSearchResults"); wrap.innerHTML="Buscando…";
+  const wrap=$("mailSearchResults"); wrap.innerHTML=busyLine("Buscando…");
+  const restore=btnBusy($("mailSearchBtn"),"Buscando…");
   try {
     const rows=await api("/api/members?q="+encodeURIComponent(q));
     if(!rows.length){ wrap.innerHTML='<p class="empty">Sin resultados.</p>'; return; }
@@ -865,6 +902,7 @@ async function mailDoSearch(){
         <button class="pill" onclick='addFromSearch(${data})'>+ Agregar</button></div>`;
     }).join("");
   } catch(err){ wrap.innerHTML=""; msg($("panelMsg"),err.message,"error"); }
+  finally { restore(); }
 }
 // Separa los préstamos de un socio (del reporte loans_contact) por estado y arma su contexto.
 function ctxFromContact(loans){
@@ -874,8 +912,7 @@ function ctxFromContact(loans){
 }
 // kind: 'overdue' = socios con algún vencido · 'upcoming' = socios con algún por vencer
 async function addByStatus(kind, btn){
-  const prev = btn ? btn.textContent : "";
-  if(btn){ btn.textContent="Cargando…"; btn.classList.add("loading"); }
+  const restore=btnBusy(btn,"Cargando…");
   try {
     const rows=await api("/api/loans/contact");
     const byCard={};
@@ -894,7 +931,7 @@ async function addByStatus(kind, btn){
     renderRecipients(); updatePreview();
     if(!agregados) msg($("panelMsg"),"No hay socios nuevos para ese atajo (ya estaban agregados o no hay).","");
   } catch(err){ msg($("panelMsg"),err.message,"error"); }
-  finally { if(btn){ btn.textContent=prev; btn.classList.remove("loading"); } }
+  finally { restore(); }
 }
 
 function updatePreview(){
@@ -950,7 +987,9 @@ async function mailSend(){
   const payload={ subject, body, dry_run:false, test_to,
     recipients: lista.map(r=>({ email:r.email||null, vars:recipVars(r),
       subject:r.subjectOverride??null, body:r.bodyOverride??null })) };
-  const btn=$("mailSendBtn"); const lbl=btn.textContent; btn.disabled=true; btn.textContent="Procesando…"; $("mailResult").innerHTML="";
+  const n = lista.filter(r=>r.email).length;
+  const restore=btnBusy($("mailSendBtn"), test_to?"Enviando prueba…":"Enviando…");
+  $("mailResult").innerHTML=busyLine(test_to?"Enviando la prueba…":`Enviando a ${n} socio(s)…`,"esto puede tardar unos segundos");
   try {
     const res=await api("/api/mail/send",{method:"POST",body:JSON.stringify(payload)});
     const modo = res.test_to ? `PRUEBA (1 muestra) → ${esc(res.test_to)}` : "ENVÍO REAL a socios";
@@ -959,7 +998,7 @@ async function mailSend(){
     if(fall.length) html+=`<div class="meta">Omitidos/errores (${fall.length}): `+fall.map(e=>`${esc(e.email)} — ${esc(e.detail||e.status)}`).join("; ")+`</div>`;
     $("mailResult").innerHTML=html;
   } catch(err){ $("mailResult").innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
-  finally { btn.disabled=false; btn.textContent=lbl; }
+  finally { restore(); }
 }
 
 $("mailSearchBtn").addEventListener("click", mailDoSearch);
@@ -1650,10 +1689,13 @@ window.autoToggleExcl=function(carnet, btn){
 };
 async function runAuto(real){
   const res=$("a_result"), r=autoCfg.reports.find(x=>x.id===autoSel);
+  const btn=real?$("a_run"):$("a_test");
   let test_to=null;
   if(!real){ test_to=$("a_testto").value.trim(); if(!test_to){ res.innerHTML='<div class="msg error">Escribí una dirección de prueba.</div>'; return; } }
   else if(!(await uiConfirm({title:"Enviar ahora", message:"Vas a enviar este reporte <b>de verdad</b> a los destinatarios reales.", ok:"Enviar", danger:true}))) return;
-  await saveAuto(true); res.innerHTML="Enviando…";
+  const restore=btnBusy(btn, real?"Enviando…":"Enviando prueba…");
+  await saveAuto(true);
+  res.innerHTML=busyLine(real?"Enviando el reporte…":"Enviando la prueba…","esto puede tardar unos segundos");
   try {
     const d=await api("/api/auto/run/"+autoSel,{method:"POST",body:JSON.stringify({test_to})});
     const rr=d.result||{}; let txt;
@@ -1661,6 +1703,7 @@ async function runAuto(real){
     else { const st=d.stats||{}; txt=test_to?`Prueba (1 muestra) enviada a ${esc(test_to)}.`:`Socios: ${st.socios}, con email: ${st.con_email}. Enviados: ${rr.enviados||0}.`; }
     res.innerHTML=okMsg(txt);
   } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+  finally { restore(); }
 }
 
 if (token) enterApp();
