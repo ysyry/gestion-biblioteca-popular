@@ -86,6 +86,7 @@
   .frow { display:flex; gap:1rem; flex-wrap:wrap; }
   .frow > div { flex:1; min-width:130px; }
   .lastrun { font-size:.8rem; color:var(--muted); margin-top:.2rem; }
+  .save-status { font-size:.8rem; font-weight:600; min-height:1.1em; }
   .auto-actions { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:1rem; align-items:center; }
   .auto-actions .btn-sec { font-size:.85rem; }
   .varhint { font-size:.76rem; color:var(--muted); margin:.3rem 0 0; }
@@ -1479,15 +1480,17 @@ async function loadAuto(){
     renderAuto();
   } catch(err){ msg($("panelMsg"),err.message,"error"); }
 }
-function renderAuto(){
-  const lr=autoCfg._last_run||{};
+function renderAutoTabs(){
   $("autoTabs").innerHTML = autoCfg.reports.map(r=>
     `<button data-id="${r.id}" class="${r.id===autoSel?'active':''} ${r.enabled?'on':''}"><span class="doten"></span>${esc(r.nombre)}</button>`
   ).join("") + `<button class="add" id="autoAdd">+ Nuevo reporte</button>`;
   $("autoTabs").querySelectorAll("button[data-id]").forEach(b=>b.onclick=()=>{ autoSel=b.dataset.id; autoExcl=[]; renderAuto(); });
   $("autoAdd").onclick=autoAddReport;
+}
+function renderAuto(){
+  renderAutoTabs();
   const rep=autoCfg.reports.find(r=>r.id===autoSel);
-  if(rep) renderAutoForm(rep, lr[rep.id]);
+  if(rep) renderAutoForm(rep, (autoCfg._last_run||{})[rep.id]);
 }
 function renderAutoForm(r, last){
   const esS = r.tipo==='socios';
@@ -1501,7 +1504,10 @@ function renderAutoForm(r, last){
         <div class="meta" style="margin:.2rem 0 0">${esS?'Un mail a cada socio que cumpla los criterios.':'Un mail a una dirección (las bibliotecarias).'} <span class="auto-badge">${esS?'A cada socio':'Interno'}</span></div>
         <div class="lastrun">${last?('Última ejecución automática: '+last):'Todavía no se ejecutó automáticamente.'}</div>
       </div>
-      <label class="switch"><input type="checkbox" id="a_enabled" ${r.enabled?'checked':''} /> Activado</label>
+      <div style="text-align:right">
+        <label class="switch"><input type="checkbox" id="a_enabled" ${r.enabled?'checked':''} /> Activado</label>
+        <div id="a_status" class="save-status" style="margin-top:.4rem">&nbsp;</div>
+      </div>
     </div>
     ${esS?'':`<label>A qué correo se envía</label><input id="a_to" value="${esc(r.to||'')}" placeholder="bibliotecabayer@gmail.com (vacío = remitente)" />`}
     <div class="frow" style="margin-top:.4rem">
@@ -1537,12 +1543,25 @@ function renderAutoForm(r, last){
     <div class="auto-actions"><button class="btn-sec danger" id="a_run">Enviar ahora ${esS?'a los socios reales':'al destinatario real'}</button></div>
     <div id="a_result" style="margin-top:.8rem"></div>
   </div>`;
-  $("a_save").onclick=()=>saveAuto(false);
+  $("a_save").onclick=()=>autoSave(true);
   $("a_preview").onclick=previewAuto;
   $("a_test").onclick=()=>runAuto(false);
   $("a_run").onclick=()=>runAuto(true);
   $("a_del").onclick=autoDelReport;
   if(esS) $("a_dest").onclick=verDestinatarios;
+  // Autoguardado: guarda solo al cambiar cualquier campo (con feedback).
+  $("autoForm").querySelectorAll("input,textarea,select").forEach(el=>{
+    el.addEventListener("change", ()=>autoSave(true));
+    if(el.tagName==="TEXTAREA"||el.type==="text") el.addEventListener("input", ()=>setStatus("pend"));
+  });
+  setStatus("ok");
+}
+function setStatus(s){
+  const el=$("a_status"); if(!el) return;
+  if(s==="pend") el.innerHTML='<span style="color:var(--muted)">● Sin guardar…</span>';
+  else if(s==="saving") el.innerHTML='<span style="color:var(--muted)">Guardando…</span>';
+  else if(s==="ok") el.innerHTML='<span style="color:var(--green)">✓ Guardado</span>';
+  else if(s==="err") el.innerHTML='<span style="color:var(--red)">✕ Error al guardar</span>';
 }
 function autoForm(){
   const r=autoCfg.reports.find(x=>x.id===autoSel), esS=r.tipo==='socios';
@@ -1555,11 +1574,16 @@ function autoForm(){
   if(esS){ o.excluidos=autoExcl; } else o.to=$("a_to").value.trim();
   return o;
 }
-async function saveAuto(silent){
+// Guarda y actualiza SOLO los tabs (no re-renderiza el form → no pierde el foco).
+async function autoSave(showStatus){
+  if(showStatus) setStatus("saving");
   try { autoCfg=await api("/api/auto/report/"+autoSel,{method:"PUT",body:JSON.stringify(autoForm())});
-    if(!silent){ $("a_result").innerHTML=okMsg("Configuración guardada."); renderAuto(); } }
-  catch(err){ if(!silent) $("a_result").innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+    renderAutoTabs();
+    if(showStatus) setStatus("ok"); }
+  catch(err){ if(showStatus){ setStatus("err"); } }
 }
+// compat: algunos flujos llaman saveAuto(true) para "guardar en silencio antes de una acción".
+async function saveAuto(silent){ await autoSave(!silent); }
 function autoAddReport(){
   const bg=document.createElement("div"); bg.className="modal-bg";
   bg.innerHTML=`<div class="modal"><h3>Nuevo reporte automático</h3>

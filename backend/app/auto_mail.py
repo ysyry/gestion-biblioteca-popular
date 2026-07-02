@@ -209,21 +209,24 @@ async def build_interno(rep: dict) -> dict:
     def nom(r):
         return f'{r.get("surname","")}, {r.get("firstname","")}'.strip(", ")
 
+    def car(r):
+        return r.get("cardnumber") or "—"
+
     vars = {
         "fecha": date.today().isoformat(),
         "dias_antes": str(dias_antes),
         "total_vencidos": str(len(venc)),
         "total_por_vencer": str(len(porv)),
         "total_socios_deben": str(len({r.get("cardnumber") for r in venc if r.get("cardnumber")})),
-        "lista_vencidos": "\n".join(f"• {nom(r)} — {_titulo(r)} (venció {_d(r.get('date_due'))}, {_dias(r)} días)" for r in venc) or "ninguno",
-        "lista_por_vencer": "\n".join(f"• {nom(r)} — {_titulo(r)} (vence {_d(r.get('date_due'))})" for r in porv) or "ninguno",
+        "lista_vencidos": "\n".join(f"• N° {car(r)} — {nom(r)} — {_titulo(r)} (venció {_d(r.get('date_due'))}, {_dias(r)} días)" for r in venc) or "ninguno",
+        "lista_por_vencer": "\n".join(f"• N° {car(r)} — {nom(r)} — {_titulo(r)} (vence {_d(r.get('date_due'))})" for r in porv) or "ninguno",
         "total_deudores_cuota": "0", "lista_cuotas": "ninguno",
     }
     html_blocks = {
-        "lista_vencidos": mail.html_table(["Socio", "Libro", "Venció", "Atraso"],
-                                          [[nom(r), _titulo(r), _d(r.get("date_due")), f"{_dias(r)} días"] for r in venc]),
-        "lista_por_vencer": mail.html_table(["Socio", "Libro", "Vence"],
-                                            [[nom(r), _titulo(r), _d(r.get("date_due"))] for r in porv]),
+        "lista_vencidos": mail.html_table(["N° socio", "Socio", "Libro", "Venció", "Atraso"],
+                                          [[car(r), nom(r), _titulo(r), _d(r.get("date_due")), f"{_dias(r)} días"] for r in venc]),
+        "lista_por_vencer": mail.html_table(["N° socio", "Socio", "Libro", "Vence"],
+                                            [[car(r), nom(r), _titulo(r), _d(r.get("date_due"))] for r in porv]),
     }
     stats = {"vencidos": len(venc), "por_vencer": len(porv)}
 
