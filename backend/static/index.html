@@ -944,13 +944,15 @@ async function mailSend(){
   } else {
     if(!(await uiConfirm({title:"Enviar a los socios", message:`Vas a enviar el mail <b>de verdad</b> a <b>${recipients.filter(r=>r.email).length}</b> socio(s) con email.`, ok:"Enviar", danger:true}))) return;
   }
+  // En modo prueba, mandamos UNA sola muestra (el primer destinatario), no una por socio.
+  const lista = test_to ? recipients.slice(0,1) : recipients;
   const payload={ subject, body, dry_run:false, test_to,
-    recipients: recipients.map(r=>({ email:r.email||null, vars:recipVars(r),
+    recipients: lista.map(r=>({ email:r.email||null, vars:recipVars(r),
       subject:r.subjectOverride??null, body:r.bodyOverride??null })) };
   const btn=$("mailSendBtn"); const lbl=btn.textContent; btn.disabled=true; btn.textContent="Procesando…"; $("mailResult").innerHTML="";
   try {
     const res=await api("/api/mail/send",{method:"POST",body:JSON.stringify(payload)});
-    const modo = res.test_to ? `PRUEBA → todo a ${esc(res.test_to)}` : "ENVÍO REAL a socios";
+    const modo = res.test_to ? `PRUEBA (1 muestra) → ${esc(res.test_to)}` : "ENVÍO REAL a socios";
     const fall=res.resultados.filter(x=>x.status==="error"||x.status==="skipped");
     let html=`<div class="msg" style="background:#e3f5ec;color:#137a52;border:1px solid #bfe6d3"><b>${modo}</b>: ${res.enviados}/${res.total} enviados.</div>`;
     if(fall.length) html+=`<div class="meta">Omitidos/errores (${fall.length}): `+fall.map(e=>`${esc(e.email)} — ${esc(e.detail||e.status)}`).join("; ")+`</div>`;

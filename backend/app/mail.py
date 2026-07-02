@@ -28,7 +28,7 @@ logger = logging.getLogger("mail")
 _VAR_RE = re.compile(r"{{\s*(\w+)\s*}}")
 
 # Paleta de marca (Manual de Identidad BPOB)
-_NAVY, _ORANGE, _MAGENTA = "#13235B", "#F5821F", "#861E92"
+_NAVY, _ORANGE, _MAGENTA, _YELLOW = "#13235B", "#F5821F", "#861E92", "#EEB500"
 
 
 def render(template: str, variables: dict[str, str]) -> str:
@@ -80,22 +80,30 @@ def html_table(headers: list[str], rows: list[list]) -> str:
 
 
 def _wrap_html(inner: str) -> str:
-    """Envuelve el cuerpo en la plantilla de marca (cabecera + color + pie)."""
+    """Envuelve el cuerpo en la plantilla de marca (cabecera + logo + colores + pie)."""
     logo = ""
     if settings.app_public_url:
         url = settings.app_public_url.rstrip("/")
-        logo = (f'<img src="{url}/logo.png" alt="" width="38" height="38" '
-                'style="vertical-align:middle;border-radius:8px;background:#fff;padding:3px;margin-right:10px">')
+        logo = (f'<td width="54" valign="middle" style="padding-right:14px">'
+                f'<img src="{url}/logo.png" alt="BPOB" width="52" height="52" '
+                'style="display:block;border-radius:12px;background:#fff;padding:4px"></td>')
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2430">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 0"><tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:14px;overflow:hidden">
-  <tr><td style="background:{_NAVY};padding:18px 24px;color:#fff">
-    {logo}<span style="font-size:17px;font-weight:bold;vertical-align:middle">Biblioteca Popular Osvaldo Bayer</span></td></tr>
-  <tr><td style="height:5px;background:{_ORANGE};font-size:0;line-height:0">&nbsp;</td></tr>
-  <tr><td style="padding:24px;font-size:15px;line-height:1.6">{inner}</td></tr>
-  <tr><td style="padding:16px 24px;background:#f7f8fa;color:#6b7280;font-size:12px;border-top:1px solid #e6e8ec">
-    Biblioteca Popular Osvaldo Bayer · Villa La Angostura, Neuquén<br>
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(19,35,91,.08)">
+  <tr><td style="background:linear-gradient(120deg,{_NAVY},{_MAGENTA});padding:20px 24px">
+    <table cellpadding="0" cellspacing="0"><tr>{logo}
+      <td valign="middle"><div style="color:#fff;font-size:18px;font-weight:bold;line-height:1.2">Biblioteca Popular<br>Osvaldo Bayer</div></td>
+    </tr></table></td></tr>
+  <tr><td style="font-size:0;line-height:0">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td width="34%" style="height:6px;background:{_YELLOW}">&nbsp;</td>
+      <td width="33%" style="height:6px;background:{_ORANGE}">&nbsp;</td>
+      <td width="33%" style="height:6px;background:{_MAGENTA}">&nbsp;</td>
+    </tr></table></td></tr>
+  <tr><td style="padding:26px 24px;font-size:15px;line-height:1.6">{inner}</td></tr>
+  <tr><td style="padding:16px 24px;background:#faf7fc;color:#6b7280;font-size:12px;border-top:2px solid {_YELLOW}">
+    <b style="color:{_MAGENTA}">Biblioteca Popular Osvaldo Bayer</b> · Villa La Angostura, Neuquén<br>
     Mensaje del sistema de gestión de la biblioteca.</td></tr>
 </table></td></tr></table></body></html>"""
 
