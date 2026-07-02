@@ -1,5 +1,47 @@
-"""Tests de los reportes automáticos: split de préstamos y exclusión de bajas/becados."""
-from app import auto_mail
+"""Tests de los reportes automáticos: config, split de préstamos y exclusión de bajas/becados."""
+import pytest
+
+from app import auto_mail, storage
+
+
+@pytest.fixture
+def store(monkeypatch):
+    """Storage en memoria para los tests de config (no toca archivo ni Postgres)."""
+    mem = {}
+    monkeypatch.setattr(storage, "get", lambda k: mem.get(k))
+    monkeypatch.setattr(storage, "set", lambda k, v: mem.__setitem__(k, v))
+    return mem
+
+
+# ── Config: lista de reportes ───────────────────────────────────────────────
+def test_config_arranca_con_dos_reportes(store):
+    cfg = auto_mail.load_config()
+    ids = [r["id"] for r in cfg["reports"]]
+    assert ids == ["resumen", "socios"]
+
+
+def test_add_update_delete_report(store):
+    rep = auto_mail.add_report("interno", "Cuotas mensual")
+    assert rep["tipo"] == "interno" and rep["nombre"] == "Cuotas mensual"
+    auto_mail.update_report(rep["id"], {"cada_dias": 30, "incluir_cuotas": True})
+    assert auto_mail.get_report(rep["id"])["cada_dias"] == 30
+    auto_mail.delete_report(rep["id"])
+    assert auto_mail.get_report(rep["id"]) is None
+
+
+def test_migracion_de_formato_viejo(store):
+    # Formato viejo: dos jobs fijos con sus valores.
+    store["auto_mail"] = {"resumen_interno": {"cada_dias": 15, "enabled": True},
+                          "recordatorio_socios": {"umbral_atraso": 30},
+                          "_last_run": {"resumen_interno": "2026-01-01"}}
+    cfg = auto_mail.load_config()
+    resumen = next(r for r in cfg["reports"] if r["id"] == "resumen")
+    socios = next(r for r in cfg["reports"] if r["id"] == "socios")
+    assert resumen["cada_dias"] == 15 and resumen["enabled"] is True
+    assert socios["umbral_atraso"] == 30
+
+
+"""Tests de la lógica de préstamos y exclusiones."""
 
 
 def test_split_loans():
@@ -70,3 +112,22 @@ async def test_socios_respeta_excluidos(monkeypatch):
            "incluir_cuotas": False, "excluidos": ["1"]}
     data = await auto_mail._socios_recipients(rep)
     assert data["recipients"] == []   # el único candidato está excluido
+
+
+async def test_interno_cuota_excluye_bajas_y_becados(monkeypatch):
+    async def loans():
+        return []
+    async def cmap():
+        return {"1": {"matricula": "1", "apellido": "A", "nombre": "a", "debe": 3, "impagos": ["Ene"]},
+                "2": {"matricula": "2", "apellido": "Baja", "nombre": "b", "debe": 5, "impagos": ["Ene"]},
+                "3": {"matricula": "3", "apellido": "Bec", "nombre": "c", "debe": 2, "impagos": ["Feb"]}}
+    async def members():
+        return {"1": {"categorycode": "AD"}, "2": {"categorycode": "B"}, "3": {"categorycode": "BEC."}}
+    monkeypatch.setattr(auto_mail, "_all_loans", loans)
+    monkeypatch.setattr(auto_mail, "_cuota_map", cmap)
+    monkeypatch.setattr(auto_mail, "_members_map", members)
+    rep = {"tipo": "interno", "dias_antes": 7, "umbral_atraso": 1,
+           "incluir_vencidos": False, "incluir_por_vencer": False,
+           "incluir_cuotas": True, "umbral_cuota": 1, "subject": "s", "body": "{{lista_cuotas}}", "footer": ""}
+    d = await auto_mail.build_interno(rep)
+    assert d["stats"]["deudores_cuota"] == 1     # solo el activo; baja y becado excluidos
