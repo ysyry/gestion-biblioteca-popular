@@ -80,26 +80,25 @@ def html_table(headers: list[str], rows: list[list]) -> str:
 
 
 def _wrap_html(inner: str) -> str:
-    """Envuelve el cuerpo en la plantilla de marca (cabecera + logo + colores + pie)."""
-    logo = ""
+    """Envuelve el cuerpo en la plantilla de marca (logo + cinta de colores + pie)."""
     if settings.app_public_url:
         url = settings.app_public_url.rstrip("/")
-        logo = (f'<td width="54" valign="middle" style="padding-right:14px">'
-                f'<img src="{url}/logo.png" alt="BPOB" width="52" height="52" '
-                'style="display:block;border-radius:12px;background:#fff;padding:4px"></td>')
+        # Logo completo a tamaño natural (948x456 ≈ 2:1), sin deformar.
+        cabecera = (f'<img src="{url}/logo.png" alt="Biblioteca Popular Osvaldo Bayer" '
+                    'width="248" style="display:block;width:248px;max-width:70%;height:auto">')
+    else:
+        cabecera = (f'<div style="color:{_MAGENTA};font-size:20px;font-weight:bold;line-height:1.2">'
+                    'Biblioteca Popular<br>Osvaldo Bayer</div>')
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2430">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 0"><tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(19,35,91,.08)">
-  <tr><td style="background:linear-gradient(120deg,{_NAVY},{_MAGENTA});padding:20px 24px">
-    <table cellpadding="0" cellspacing="0"><tr>{logo}
-      <td valign="middle"><div style="color:#fff;font-size:18px;font-weight:bold;line-height:1.2">Biblioteca Popular<br>Osvaldo Bayer</div></td>
-    </tr></table></td></tr>
+  <tr><td align="center" style="padding:26px 24px 18px">{cabecera}</td></tr>
   <tr><td style="font-size:0;line-height:0">
     <table width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td width="34%" style="height:6px;background:{_YELLOW}">&nbsp;</td>
-      <td width="33%" style="height:6px;background:{_ORANGE}">&nbsp;</td>
-      <td width="33%" style="height:6px;background:{_MAGENTA}">&nbsp;</td>
+      <td width="34%" style="height:7px;background:{_YELLOW}">&nbsp;</td>
+      <td width="33%" style="height:7px;background:{_ORANGE}">&nbsp;</td>
+      <td width="33%" style="height:7px;background:{_MAGENTA}">&nbsp;</td>
     </tr></table></td></tr>
   <tr><td style="padding:26px 24px;font-size:15px;line-height:1.6">{inner}</td></tr>
   <tr><td style="padding:16px 24px;background:#faf7fc;color:#6b7280;font-size:12px;border-top:2px solid {_YELLOW}">
@@ -198,6 +197,9 @@ async def send_campaign(
        email, vars (dict), subject (override|None), body (override|None),
        html (dict opcional var->HTML para listas que llegan como tabla).
     """
+    # En modo prueba se manda UNA sola muestra (el primer destinatario), no una por socio.
+    if test_to:
+        recipients = recipients[:1]
     provider = (settings.mail_provider or "smtp").lower()
     from_addr = (settings.mail_from if provider == "resend" else "") or settings.smtp_from or settings.smtp_user
     from_hdr = formataddr((settings.smtp_from_name, from_addr))
