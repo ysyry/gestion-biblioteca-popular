@@ -1507,7 +1507,7 @@ function renderAutoForm(r, last){
     <div class="frow" style="margin-top:.4rem">
       <div><label>Enviar cada (días)</label><input id="a_cada" type="number" min="1" value="${r.cada_dias}" /></div>
       <div><label>"Por vencer" = vence dentro de (días)</label><input id="a_antes" type="number" min="0" value="${r.dias_antes}" /></div>
-      ${esS?`<div><label>Avisar vencidos desde (días atraso)</label><input id="a_umbral" type="number" min="0" value="${r.umbral_atraso||1}" /></div>`:''}
+      <div><label>Listar vencidos desde (días de atraso)</label><input id="a_umbral" type="number" min="0" value="${r.umbral_atraso||1}" /></div>
     </div>
     <label style="margin-top:.6rem">Qué incluye</label>
     <div class="auto-actions" style="margin:.2rem 0 0">
@@ -1548,10 +1548,11 @@ function autoForm(){
   const r=autoCfg.reports.find(x=>x.id===autoSel), esS=r.tipo==='socios';
   const o={ nombre:$("a_nombre").value.trim()||r.nombre, enabled:$("a_enabled").checked,
     cada_dias:+$("a_cada").value||1, dias_antes:+$("a_antes").value||0,
+    umbral_atraso:+$("a_umbral").value||0,
     incluir_vencidos:$("a_incv").checked, incluir_por_vencer:$("a_incp").checked,
     incluir_cuotas:$("a_incc").checked, umbral_cuota:+$("a_umbralc").value||1,
     subject:$("a_subject").value, body:$("a_body").value, footer:$("a_footer").value };
-  if(esS){ o.umbral_atraso=+$("a_umbral").value||0; o.excluidos=autoExcl; } else o.to=$("a_to").value.trim();
+  if(esS){ o.excluidos=autoExcl; } else o.to=$("a_to").value.trim();
   return o;
 }
 async function saveAuto(silent){

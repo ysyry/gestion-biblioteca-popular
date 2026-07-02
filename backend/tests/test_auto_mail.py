@@ -9,6 +9,26 @@ def test_split_loans():
     assert len(porv) == 1            # solo el de -2 (dentro de 3 días); -30 queda fuera
 
 
+def test_split_loans_respeta_umbral():
+    # Con umbral 30, solo entran los vencidos hace 30 días o más.
+    rows = [{"dias_atraso": "5"}, {"dias_atraso": "40"}, {"dias_atraso": "31"}]
+    venc, _ = auto_mail._split_loans(rows, dias_antes=3, umbral_atraso=30)
+    assert len(venc) == 2            # 40 y 31; el de 5 días queda afuera
+
+
+async def test_interno_usa_umbral_atraso(monkeypatch):
+    async def loans():
+        return [{"cardnumber": "1", "surname": "A", "firstname": "x", "title": "L1", "date_due": "2026-01-01", "dias_atraso": "5"},
+                {"cardnumber": "2", "surname": "B", "firstname": "y", "title": "L2", "date_due": "2025-11-01", "dias_atraso": "60"}]
+    monkeypatch.setattr(auto_mail, "_all_loans", loans)
+    rep = {"tipo": "interno", "dias_antes": 7, "umbral_atraso": 30,
+           "incluir_vencidos": True, "incluir_por_vencer": False, "incluir_cuotas": False,
+           "subject": "s", "body": "{{lista_vencidos}}", "footer": ""}
+    d = await auto_mail.build_interno(rep)
+    assert d["stats"]["vencidos"] == 1          # solo el de 60 días (umbral 30)
+    assert "L1" not in d["body"] and "L2" in d["body"]
+
+
 async def test_socios_excluye_bajas_y_becados(monkeypatch):
     async def loans():
         return [

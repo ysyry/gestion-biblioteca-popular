@@ -34,7 +34,7 @@ def _default_reports() -> list[dict]:
     return [
         {
             "id": "resumen", "nombre": "Resumen interno", "tipo": "interno", "enabled": False,
-            "cada_dias": 7, "dias_antes": 7, "to": "",
+            "cada_dias": 7, "dias_antes": 7, "to": "", "umbral_atraso": 1,
             "incluir_vencidos": True, "incluir_por_vencer": True, "incluir_cuotas": False, "umbral_cuota": 1,
             "subject": "Resumen de préstamos — Biblioteca Osvaldo Bayer",
             "body": ("Resumen automático al {{fecha}}.\n\n"
@@ -203,7 +203,8 @@ def _split_loans(rows, dias_antes, umbral_atraso=1):
 async def build_interno(rep: dict) -> dict:
     rows = await _all_loans()
     dias_antes = int(rep.get("dias_antes", 7))
-    venc, porv = _split_loans(rows, dias_antes, 1)
+    umbral_atraso = int(rep.get("umbral_atraso", 1))   # vencidos desde N días de atraso
+    venc, porv = _split_loans(rows, dias_antes, umbral_atraso)
 
     def nom(r):
         return f'{r.get("surname","")}, {r.get("firstname","")}'.strip(", ")
