@@ -48,6 +48,15 @@ async def health():
 
 app.include_router(router)
 
+
+# ── Precalentar cachés al arrancar (préstamos + cuotas), sin bloquear ──────────
+@app.on_event("startup")
+async def _warmup_startup():
+    import asyncio
+
+    from .api.routes import warmup
+    asyncio.create_task(warmup())  # fire-and-forget: el arranque no espera
+
 # ── Frontend del POC (HTML único + estáticos servidos por el mismo backend) ──
 _STATIC = Path(__file__).resolve().parent.parent / "static"
 

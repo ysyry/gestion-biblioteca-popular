@@ -34,8 +34,8 @@ async def _loans_contact_cached(repo: KohaRepository, fresh: bool = False):
     """Préstamos vigentes con caché compartido (lo usan préstamos, stats y cruce)."""
     if fresh:
         cache.invalidate("loans_contact")
-    return await cache.cached("loans_contact", TTL_LOANS, repo.loans_contact)
-from ..koha.client import KohaError
+    return await cache.cached("loans_contact", TTL_LOANS, repo.loans_contact, swr=not fresh)
+from ..koha.client import KohaClient, KohaError
 from ..koha.reports import KohaRepository
 from ..schemas import LoginRequest, LoginResponse, MailSendRequest
 
@@ -178,7 +178,7 @@ async def stats_catalog(fresh: bool = Query(False), repo: KohaRepository = Depen
     """KPIs del catálogo (ejemplares, títulos, circulación, tipos, colecciones)."""
     if fresh:
         cache.invalidate("stats_catalog")
-    return await cache.cached("stats_catalog", TTL_CATALOG, lambda: _stats_catalog(repo))
+    return await cache.cached("stats_catalog", TTL_CATALOG, lambda: _stats_catalog(repo), swr=not fresh)
 
 
 async def _stats_catalog(repo: KohaRepository):
@@ -189,9 +189,7 @@ async def _stats_catalog(repo: KohaRepository):
             logger.warning("stats/catalog: consulta falló: %s", exc)
             return []
 
-    totals = await q(_SQL_TOTALES)
-    tipos = await q(_SQL_TIPOS)
-    top = await q(_SQL_TOP_HIST)
+    totals, tipos, top = await asyncio.gather(q(_SQL_TOTALES), q(_SQL_TIPOS), q(_SQL_TOP_HIST))
     t = totals[0] if totals else {}
     ejemplares, titulos = _num(t.get("ejemplares")), _num(t.get("titulos"))
     sin_circular = _num(t.get("sin_circular"))
@@ -232,7 +230,7 @@ async def stats_historico(
     key = f"hist:{d1.isoformat()}:{d2.isoformat()}"
     if fresh:
         cache.invalidate(key)
-    return await cache.cached(key, TTL_HEAVY, lambda: _stats_historico(repo, d1, d2))
+    return await cache.cached(key, TTL_HEAVY, lambda: _stats_historico(repo, d1, d2), swr=not fresh)
 
 
 async def _stats_historico(repo: KohaRepository, d1, d2):
@@ -246,26 +244,28 @@ async def _stats_historico(repo: KohaRepository, d1, d2):
             logger.warning("stats/historico: consulta falló: %s", exc)
             return []
 
-    totales = await q(f"""
+    totales, por_mes, top_titulos, top_socios = await asyncio.gather(
+        q(f"""
         SELECT SUM(s.type='issue') AS prestamos, SUM(s.type='return') AS devoluciones,
                SUM(s.type='renew') AS renovaciones,
                COUNT(DISTINCT CASE WHEN s.type='issue' THEN s.borrowernumber END) AS socios_activos
-        FROM statistics s WHERE {rango}""")
-    por_mes = await q(f"""
+        FROM statistics s WHERE {rango}"""),
+        q(f"""
         SELECT DATE_FORMAT(s.datetime,'%Y-%m') AS label, COUNT(*) AS count
         FROM statistics s WHERE s.type='issue' AND {rango}
-        GROUP BY label ORDER BY label""")
-    top_titulos = await q(f"""
+        GROUP BY label ORDER BY label"""),
+        q(f"""
         SELECT b.title AS label, COUNT(*) AS count
         FROM statistics s JOIN items i ON i.itemnumber=s.itemnumber
         JOIN biblio b ON b.biblionumber=i.biblionumber
         WHERE s.type='issue' AND {rango}
-        GROUP BY b.title ORDER BY count DESC LIMIT 10""")
-    top_socios = await q(f"""
+        GROUP BY b.title ORDER BY count DESC LIMIT 10"""),
+        q(f"""
         SELECT CONCAT(br.surname, ', ', br.firstname) AS label, COUNT(*) AS count
         FROM statistics s JOIN borrowers br ON br.borrowernumber=s.borrowernumber
         WHERE s.type='issue' AND {rango}
-        GROUP BY br.borrowernumber ORDER BY count DESC LIMIT 10""")
+        GROUP BY br.borrowernumber ORDER BY count DESC LIMIT 10"""),
+    )
 
     t = totales[0] if totales else {}
 
@@ -289,7 +289,7 @@ async def stats_estrategia(fresh: bool = Query(False), repo: KohaRepository = De
     """Panel estratégico: crecimiento, socios, estacionalidad y antigüedad del acervo."""
     if fresh:
         cache.invalidate("estrategia")
-    return await cache.cached("estrategia", TTL_HEAVY, lambda: _stats_estrategia(repo))
+    return await cache.cached("estrategia", TTL_HEAVY, lambda: _stats_estrategia(repo), swr=not fresh)
 
 
 async def _stats_estrategia(repo: KohaRepository):
@@ -303,29 +303,32 @@ async def _stats_estrategia(repo: KohaRepository):
     def serie(rows):
         return [{"label": str(r.get("label") or "—"), "count": _num(r.get("count"))} for r in rows]
 
-    prestamos_anio = await q("""SELECT YEAR(datetime) AS label, COUNT(*) AS count
-        FROM statistics WHERE type='issue' AND datetime>='2013-01-01' GROUP BY label ORDER BY label""")
-    socios_activos_anio = await q("""SELECT YEAR(datetime) AS label, COUNT(DISTINCT borrowernumber) AS count
-        FROM statistics WHERE type='issue' AND datetime>='2013-01-01' GROUP BY label ORDER BY label""")
-    socios_nuevos_anio = await q("""SELECT YEAR(dateenrolled) AS label, COUNT(*) AS count
-        FROM borrowers WHERE dateenrolled IS NOT NULL GROUP BY label ORDER BY label""")
-    estacionalidad = await q("""SELECT MONTH(datetime) AS label, COUNT(*) AS count
-        FROM statistics WHERE type='issue' GROUP BY label ORDER BY label""")
-    acervo_anio = await q("""SELECT YEAR(dateaccessioned) AS label, COUNT(*) AS count
+    (prestamos_anio, socios_activos_anio, socios_nuevos_anio, estacionalidad,
+     acervo_anio, socios_kpi, acervo_kpi) = await asyncio.gather(
+        q("""SELECT YEAR(datetime) AS label, COUNT(*) AS count
+        FROM statistics WHERE type='issue' AND datetime>='2013-01-01' GROUP BY label ORDER BY label"""),
+        q("""SELECT YEAR(datetime) AS label, COUNT(DISTINCT borrowernumber) AS count
+        FROM statistics WHERE type='issue' AND datetime>='2013-01-01' GROUP BY label ORDER BY label"""),
+        q("""SELECT YEAR(dateenrolled) AS label, COUNT(*) AS count
+        FROM borrowers WHERE dateenrolled IS NOT NULL GROUP BY label ORDER BY label"""),
+        q("""SELECT MONTH(datetime) AS label, COUNT(*) AS count
+        FROM statistics WHERE type='issue' GROUP BY label ORDER BY label"""),
+        q("""SELECT YEAR(dateaccessioned) AS label, COUNT(*) AS count
         FROM items WHERE dateaccessioned IS NOT NULL AND YEAR(dateaccessioned) >= YEAR(CURDATE())-15
-        GROUP BY label ORDER BY label""")
-    socios_kpi = await q("""SELECT
+        GROUP BY label ORDER BY label"""),
+        q("""SELECT
         (SELECT COUNT(*) FROM borrowers) AS total,
         (SELECT COUNT(*) FROM borrowers b WHERE EXISTS (
             SELECT 1 FROM statistics s WHERE s.borrowernumber=b.borrowernumber
             AND s.type='issue' AND s.datetime >= NOW() - INTERVAL 1 YEAR)) AS activos12,
         (SELECT COUNT(*) FROM borrowers b WHERE NOT EXISTS (
-            SELECT 1 FROM statistics s WHERE s.borrowernumber=b.borrowernumber AND s.type='issue')) AS nunca""")
-    acervo_kpi = await q("""SELECT
+            SELECT 1 FROM statistics s WHERE s.borrowernumber=b.borrowernumber AND s.type='issue')) AS nunca"""),
+        q("""SELECT
         (SELECT COUNT(*) FROM items) AS total_items,
         SUM(dateaccessioned >= CURDATE() - INTERVAL 1 YEAR) AS nuevos12,
         SUM(dateaccessioned >= CURDATE() - INTERVAL 5 YEAR) AS ult5
-        FROM items""")
+        FROM items"""),
+    )
 
     sk = socios_kpi[0] if socios_kpi else {}
     ak = acervo_kpi[0] if acervo_kpi else {}
@@ -460,7 +463,7 @@ async def agenda_events(
     if fresh:
         cache.invalidate(key)
     try:
-        evs = await cache.cached(key, TTL_AGENDA, lambda: agenda.events(d1, d2))
+        evs = await cache.cached(key, TTL_AGENDA, lambda: agenda.events(d1, d2), swr=not fresh)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"No se pudo leer el calendario: {exc}") from exc
     return {"configured": True, "desde": d1.isoformat(), "hasta": d2.isoformat(),
@@ -510,8 +513,11 @@ async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_r
       FROM borrowers br LEFT JOIN categories c ON c.categorycode = br.categorycode"""
     if fresh:
         cache.invalidate("cruce_members")
-    koha = await cache.cached("cruce_members", TTL_CRUCE, lambda: repo.run_sql(sql))
-    data = await asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles()))
+    # Koha (SQL) y la planilla de cuotas (Google Sheets) son independientes → en paralelo.
+    koha, data = await asyncio.gather(
+        cache.cached("cruce_members", TTL_CRUCE, lambda: repo.run_sql(sql), swr=not fresh),
+        asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles())),
+    )
 
     # Socios "de baja" en Koha (categoría B). No cuentan ni reciben recordatorios.
     BAJA = {"B"}
@@ -609,3 +615,36 @@ async def auto_run(rid: str, body: dict = Body(default={}), _: str = Depends(get
         return await auto_mail.run_report(rep, test_to=(body or {}).get("test_to") or None)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── Warmup: precalienta los cachés más consultados al arrancar ────────────────
+async def warmup() -> None:
+    """Precarga en segundo plano los datos que gatean las primeras pantallas
+    (préstamos y cuotas), para que la primera visita tras un redeploy no espere.
+
+    Tolerante: cualquier fallo se registra y no afecta el arranque de la app.
+    """
+    if not (settings.koha_user and settings.koha_password):
+        logger.info("warmup: sin credenciales de servicio de Koha, se omite.")
+        return
+    client = KohaClient(settings.koha_base_url, settings.koha_user, settings.koha_password)
+    try:
+        await client.login()
+        repo = KohaRepository(client)
+        try:
+            await cache.cached("loans_contact", TTL_LOANS, repo.loans_contact)
+            logger.info("warmup: préstamos precargados.")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("warmup préstamos: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("warmup: no se pudo iniciar sesión en Koha: %s", exc)
+        return
+    finally:
+        await client.aclose()
+
+    if cuotas.configured():
+        try:
+            await asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles()))
+            logger.info("warmup: cuotas precargadas.")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("warmup cuotas: %s", exc)
