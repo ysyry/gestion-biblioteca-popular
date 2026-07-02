@@ -502,8 +502,9 @@ async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_r
     if not cuotas.configured():
         return {"configured": False}
     import asyncio
-    sql = """SELECT br.cardnumber, br.surname, br.firstname, br.email, br.categorycode,
-      c.description AS categoria,
+    sql = """SELECT br.cardnumber, br.surname, br.firstname,
+      COALESCE(NULLIF(TRIM(br.email),''), NULLIF(TRIM(br.emailpro),''), NULLIF(TRIM(br.B_email),'')) AS email,
+      br.categorycode, c.description AS categoria,
       (SELECT COUNT(*) FROM statistics s WHERE s.borrowernumber=br.borrowernumber
         AND s.type='issue' AND s.datetime >= NOW() - INTERVAL 1 YEAR) AS l12
       FROM borrowers br LEFT JOIN categories c ON c.categorycode = br.categorycode"""

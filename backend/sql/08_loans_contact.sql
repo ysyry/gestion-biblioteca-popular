@@ -16,7 +16,7 @@ SELECT
     br.cardnumber,
     br.surname,
     br.firstname,
-    br.email,
+    COALESCE(NULLIF(TRIM(br.email),''), NULLIF(TRIM(br.emailpro),''), NULLIF(TRIM(br.B_email),'')) AS email,
     br.phone,
     i.barcode,
     b.title,

@@ -149,7 +149,10 @@ async def _members_map() -> dict:
     client = KohaClient(settings.koha_base_url, settings.koha_user, settings.koha_password)
     await client.login()
     try:
-        rows = await client.run_sql("SELECT cardnumber, surname, firstname, email, categorycode FROM borrowers")
+        rows = await client.run_sql(
+            "SELECT cardnumber, surname, firstname, "
+            "COALESCE(NULLIF(TRIM(email),''), NULLIF(TRIM(emailpro),''), NULLIF(TRIM(B_email),'')) AS email, "
+            "categorycode FROM borrowers")
     finally:
         await client.aclose()
     return {_norm(r["cardnumber"]): r for r in rows if r.get("cardnumber")}

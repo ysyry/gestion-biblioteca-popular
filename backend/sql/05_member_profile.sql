@@ -10,7 +10,7 @@ SELECT
     b.cardnumber,
     b.surname,
     b.firstname,
-    b.email,
+    COALESCE(NULLIF(TRIM(b.email),''), NULLIF(TRIM(b.emailpro),''), NULLIF(TRIM(b.B_email),'')) AS email,
     b.phone,
     b.mobile,
     b.address,

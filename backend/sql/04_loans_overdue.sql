@@ -10,7 +10,7 @@ SELECT
     br.surname,
     br.firstname,
     br.phone,
-    br.email,
+    COALESCE(NULLIF(TRIM(br.email),''), NULLIF(TRIM(br.emailpro),''), NULLIF(TRIM(br.B_email),'')) AS email,
     i.barcode,
     b.title,
     iss.date_due,

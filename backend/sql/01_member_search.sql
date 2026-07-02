@@ -9,7 +9,7 @@ SELECT
     cardnumber,
     surname,
     firstname,
-    email,
+    COALESCE(NULLIF(TRIM(email),''), NULLIF(TRIM(emailpro),''), NULLIF(TRIM(B_email),'')) AS email,
     phone,
     categorycode AS category,
     dateexpiry
