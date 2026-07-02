@@ -39,7 +39,7 @@ def _default_reports() -> list[dict]:
             "subject": "Resumen de préstamos — Biblioteca Osvaldo Bayer",
             "body": ("Resumen automático al {{fecha}}.\n\n"
                      "VENCIDOS ({{total_vencidos}}):\n{{lista_vencidos}}\n\n"
-                     "POR VENCER en los próximos {{dias_antes}} días ({{total_por_vencer}}):\n"
+                     "EN PRÉSTAMO (vencen en los próximos {{dias_antes}} días) ({{total_por_vencer}}):\n"
                      "{{lista_por_vencer}}\n\n"
                      "Socios con préstamos vencidos: {{total_socios_deben}}."),
             "footer": "— Sistema de gestión · Biblioteca Popular Osvaldo Bayer",
@@ -53,7 +53,7 @@ def _default_reports() -> list[dict]:
             "body": ("Hola {{nombre}},\n\n"
                      "Te recordamos tus préstamos en la Biblioteca Popular Osvaldo Bayer.\n\n"
                      "Vencidos ({{cantidad_vencidos}}):\n{{vencidos}}\n\n"
-                     "Por vencer ({{cantidad_por_vencer}}):\n{{por_vencer}}"),
+                     "En préstamo ({{cantidad_por_vencer}}):\n{{por_vencer}}"),
             "footer": "Te esperamos para renovarlos o devolverlos. ¡Gracias!\nBiblioteca Popular Osvaldo Bayer.",
         },
     ]
