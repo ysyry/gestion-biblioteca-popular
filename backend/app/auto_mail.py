@@ -28,6 +28,7 @@ from .koha.reports import KohaRepository
 logger = logging.getLogger("auto_mail")
 
 CONFIG_KEY = "auto_mail"
+_CONFIG_VER = 1   # versión del esquema; sube 1 por cada migración de datos guardados
 
 
 def _default_reports() -> list[dict]:
@@ -63,6 +64,7 @@ def _default_reports() -> list[dict]:
 def load_config() -> dict:
     data = storage.get(CONFIG_KEY) or {}
     reports = data.get("reports")
+    existing = bool(reports)   # True si ya había una config guardada (para migrar datos reales)
     if not reports:
         # Migración del formato viejo (dos jobs fijos) o primer arranque.
         reports = _default_reports()
@@ -71,8 +73,60 @@ def load_config() -> dict:
             for rep in reports:
                 old = data.get(mapa.get(rep["id"], ""), {})
                 rep.update({k: v for k, v in old.items() if k in rep})
-    last = data.get("_last_run") or {}
-    return {"reports": reports, "_last_run": last}
+            existing = True
+    cfg = {"reports": reports, "_last_run": data.get("_last_run") or {}}
+
+    # Migraciones de datos guardados (idempotentes, se corren una sola vez por versión).
+    ver = data.get("_ver", 0)
+    if ver < _CONFIG_VER:
+        if existing:
+            _migrate_v1(cfg)
+        cfg["_ver"] = _CONFIG_VER
+        _save(cfg)
+    else:
+        cfg["_ver"] = ver
+    return cfg
+
+
+def _lectura_report(reports: list[dict]) -> dict:
+    """Reporte a socios para hacer seguimiento de lectura (listando lo que tienen en préstamo)."""
+    base = next(r for r in _default_reports() if r["tipo"] == "socios")
+    return {
+        **base,
+        "id": _new_id(reports),
+        "nombre": "Lectura",
+        "enabled": False,
+        "cada_dias": 30,
+        "dias_antes": 90,   # ventana amplia: "en préstamo" abarca todo lo que tienen prestado
+        "incluir_vencidos": True,
+        "incluir_por_vencer": True,
+        "incluir_cuotas": False,
+        "subject": "¿Cómo vas con la lectura? — Biblioteca Osvaldo Bayer",
+        "body": ("Hola {{nombre}}, este es un mensaje automático para saber cómo vas con la "
+                 "lectura. ¿Te está gustando? ¿Te falta poco? Acordate que si no te atrapó "
+                 "podés venir a cambiar de autor, de género, de tema. Hay mucho y estamos "
+                 "para acompañarte. Escribinos al wp y contanos.\n\n"
+                 "Nos aparece que tenés estos libros en préstamo, ¿es correcto?\n"
+                 "{{por_vencer}}"),
+        "footer": "",
+    }
+
+
+def _migrate_v1(cfg: dict) -> None:
+    """v1: renombra 'por vencer' → 'en préstamo' en los reportes existentes y agrega 'Lectura'."""
+    swaps = {
+        "POR VENCER en los próximos {{dias_antes}} días ({{total_por_vencer}}):":
+            "EN PRÉSTAMO (vencen en los próximos {{dias_antes}} días) ({{total_por_vencer}}):",
+        "Por vencer ({{cantidad_por_vencer}}):":
+            "En préstamo ({{cantidad_por_vencer}}):",
+    }
+    for r in cfg["reports"]:
+        b = r.get("body") or ""
+        for old, new in swaps.items():
+            b = b.replace(old, new)   # solo cambia si el fragmento exacto está presente
+        r["body"] = b
+    if not any((r.get("nombre") or "").strip().lower() == "lectura" for r in cfg["reports"]):
+        cfg["reports"].append(_lectura_report(cfg["reports"]))
 
 
 def _save(cfg: dict) -> None:

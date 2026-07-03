@@ -41,6 +41,27 @@ def test_migracion_de_formato_viejo(store):
     assert socios["umbral_atraso"] == 30
 
 
+def test_migracion_v1_renombra_y_agrega_lectura(store):
+    # Config existente con el texto viejo y sin versión → debe migrarse una sola vez.
+    store["auto_mail"] = {"reports": [
+        {"id": "resumen", "tipo": "interno", "nombre": "Resumen interno",
+         "body": "VENCIDOS:\n{{lista_vencidos}}\n\nPor vencer ({{cantidad_por_vencer}}):\n{{por_vencer}}",
+         "enabled": True},
+    ]}
+    cfg = auto_mail.load_config()
+    nombres = [r.get("nombre") for r in cfg["reports"]]
+    assert "Lectura" in nombres                       # se agregó el reporte de lectura
+    assert "Por vencer" not in cfg["reports"][0]["body"]
+    assert "En préstamo" in cfg["reports"][0]["body"]  # wording actualizado
+    assert cfg["_ver"] == auto_mail._CONFIG_VER
+
+    # Idempotente: correrla de nuevo no duplica "Lectura" ni vuelve a tocar nada.
+    cfg2 = auto_mail.load_config()
+    assert [r.get("nombre") for r in cfg2["reports"]].count("Lectura") == 1
+    lectura = next(r for r in cfg2["reports"] if r["nombre"] == "Lectura")
+    assert lectura["tipo"] == "socios" and "{{por_vencer}}" in lectura["body"]
+
+
 """Tests de la lógica de préstamos y exclusiones."""
 
 
