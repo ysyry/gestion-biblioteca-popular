@@ -105,6 +105,14 @@
   .frow > div { flex:1; min-width:130px; }
   .lastrun { font-size:.8rem; color:var(--muted); margin-top:.2rem; }
   .save-status { font-size:.8rem; font-weight:600; min-height:1.1em; }
+  .auto-hist { margin-top:1.3rem; border-top:1px solid var(--line); padding-top:.9rem; }
+  .auto-hist-head { font-weight:600; color:var(--navy); font-size:.95rem; margin-bottom:.6rem; display:flex; align-items:center; gap:.5rem; }
+  .hist-item { border:1px solid var(--line); border-radius:9px; padding:.5rem .7rem; margin-bottom:.5rem; }
+  .hist-top { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
+  .hist-top .meta { flex:1; min-width:140px; }
+  .hist-dest { margin-top:.5rem; border-top:1px dashed var(--line); padding-top:.4rem; max-height:230px; overflow:auto; }
+  .hist-d { display:flex; justify-content:space-between; align-items:center; gap:.5rem; padding:.22rem 0; font-size:.85rem; border-bottom:1px solid #f2f3f5; }
+  .hist-d:last-child { border-bottom:none; }
   .auto-actions { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:1rem; align-items:center; }
   .auto-actions .btn-sec { font-size:.85rem; }
   .varhint { font-size:.76rem; color:var(--muted); margin:.3rem 0 0; }
@@ -1590,6 +1598,10 @@ function renderAutoForm(r, last){
     </div>
     <div class="auto-actions"><button class="btn-sec danger" id="a_run">Enviar ahora ${esS?'a los socios reales':'al destinatario real'}</button></div>
     <div id="a_result" style="margin-top:.8rem"></div>
+    <div class="auto-hist">
+      <div class="auto-hist-head">📋 Historial de envíos <button class="btn-refresh" id="a_histref" style="float:none">↻</button></div>
+      <div id="a_history">${LOADER_SM}</div>
+    </div>
   </div>`;
   $("a_save").onclick=()=>autoSave(true);
   $("a_preview").onclick=previewAuto;
@@ -1597,12 +1609,56 @@ function renderAutoForm(r, last){
   $("a_run").onclick=()=>runAuto(true);
   $("a_del").onclick=autoDelReport;
   if(esS) $("a_dest").onclick=verDestinatarios;
+  $("a_histref").onclick=()=>loadAutoHistory(r.id);
+  loadAutoHistory(r.id);
   // Autoguardado: guarda solo al cambiar cualquier campo (con feedback).
   $("autoForm").querySelectorAll("input,textarea,select").forEach(el=>{
     el.addEventListener("change", ()=>autoSave(true));
     if(el.tagName==="TEXTAREA"||el.type==="text") el.addEventListener("input", ()=>setStatus("pend"));
   });
   setStatus("ok");
+}
+async function loadAutoHistory(rid){
+  const el=$("a_history"); if(!el) return;
+  el.innerHTML=busyLine("Cargando historial…");
+  try {
+    const d=await api("/api/auto/history/"+rid+"?limit=20");
+    const items=d.items||[];
+    if(!items.length){ el.innerHTML='<p class="empty">Todavía no hay envíos registrados para este reporte.</p>'; return; }
+    el.innerHTML=items.map(histRow).join("");
+    el.querySelectorAll(".hist-toggle").forEach(b=>b.onclick=()=>{
+      const box=b.closest(".hist-item").querySelector(".hist-dest");
+      box.classList.toggle("hide");
+      b.textContent = box.classList.contains("hide") ? b.dataset.lbl : "Ocultar destinatarios";
+    });
+  } catch(err){ el.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
+function histRow(h){
+  const dd=new Date(h.ts);
+  const cuando=isNaN(dd)?esc(h.ts):dd.toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',dateStyle:'short',timeStyle:'short'});
+  const trig={auto:'Automático',manual:'Manual',prueba:'Prueba'}[h.trigger]||esc(h.trigger||'');
+  const dests=h.destinatarios||[];
+  const sent=dests.filter(x=>x.status==='sent').length;
+  const skip=dests.filter(x=>x.status==='skipped').length;
+  const err=dests.filter(x=>x.status==='error').length;
+  let resumen;
+  if(h.ok===false) resumen=`<span style="color:var(--red)">Falló: ${esc(h.error||'error')}</span>`;
+  else resumen=`Enviados: <b>${sent}</b>${skip?` · sin email: ${skip}`:''}${err?` · <span style="color:var(--red)">errores: ${err}</span>`:''}${h.test_to?` · prueba a ${esc(h.test_to)}`:''}`;
+  const lista=dests.map(x=>{
+    const cls=x.status==='sent'?'badge green':(x.status==='error'?'badge red':'badge gray');
+    const st=x.status==='sent'?'enviado':(x.status==='skipped'?'sin email':(x.status==='error'?'error':esc(x.status||'')));
+    const quien=x.nombre?`${esc(x.nombre)}${x.email?` <small style="color:var(--muted)">(${esc(x.email)})</small>`:''}`:esc(x.email||'—');
+    return `<div class="hist-d"><span>${quien}${x.detail&&x.status!=='sent'?` <small style="color:var(--muted)">${esc(x.detail)}</small>`:''}</span><span class="${cls}">${st}</span></div>`;
+  }).join("");
+  const lbl=`Ver destinatarios (${dests.length})`;
+  return `<div class="hist-item">
+    <div class="hist-top">
+      <span><b>${cuando}</b> <span class="auto-badge">${trig}</span></span>
+      <span class="meta">${resumen}</span>
+      ${dests.length?`<button class="hist-toggle btn-sec" data-lbl="${lbl}" style="padding:.15rem .55rem;font-size:.76rem">${lbl}</button>`:''}
+    </div>
+    <div class="hist-dest hide">${lista}</div>
+  </div>`;
 }
 function setStatus(s){
   const el=$("a_status"); if(!el) return;

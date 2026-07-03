@@ -65,6 +65,32 @@ def test_migracion_v1_renombra_y_agrega_lectura(store):
 """Tests de la lógica de préstamos y exclusiones."""
 
 
+def test_historial_guarda_mas_nuevo_primero_y_filtra(store):
+    auto_mail.add_history({"report_id": "a", "ok": True, "enviados": 2})
+    auto_mail.add_history({"report_id": "b", "ok": True})
+    auto_mail.add_history({"report_id": "a", "ok": False, "error": "x"})
+    ha = auto_mail.get_history("a")
+    assert len(ha) == 2 and ha[0]["ok"] is False        # el último queda primero
+    assert len(auto_mail.get_history()) == 3            # sin filtro: todos
+
+
+async def test_run_report_registra_en_historial(store, monkeypatch):
+    async def recs(rep):
+        return {"recipients": [{"email": "ana@b.com", "vars": {"nombre": "Ana"}}],
+                "con_email": 1, "sin_email": 0}
+    async def fake_send(subject, body, recipients, dry_run, test_to=None):
+        return {"total": 1, "enviados": 1, "resultados": [{"email": "ana@b.com", "status": "sent"}]}
+    monkeypatch.setattr(auto_mail, "_socios_recipients", recs)
+    monkeypatch.setattr(auto_mail.mail, "send_campaign", fake_send)
+
+    rep = {"id": "socios", "tipo": "socios", "subject": "s", "body": "b", "footer": ""}
+    await auto_mail.run_report(rep, trigger="auto")
+
+    h = auto_mail.get_history("socios")
+    assert len(h) == 1 and h[0]["trigger"] == "auto" and h[0]["enviados"] == 1
+    assert h[0]["destinatarios"][0]["nombre"] == "Ana"   # se enriquece con el nombre
+
+
 def test_d_formatea_fecha_argentina():
     assert auto_mail._d("2026-06-15") == "15/06/2026"
     assert auto_mail._d("2026-06-15T00:00:00") == "15/06/2026"   # recorta la hora

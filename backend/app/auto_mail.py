@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 
 from . import cuotas
 from . import mail
@@ -175,6 +175,47 @@ def _mark_run(rid: str, when: str) -> None:
     cfg = load_config()
     cfg["_last_run"][rid] = when
     _save(cfg)
+
+
+# ── Historial de envíos ─────────────────────────────────────────────────────
+HISTORY_KEY = "auto_mail_history"
+_HISTORY_MAX = 200   # tope global de ejecuciones guardadas (las más nuevas primero)
+
+
+def add_history(entry: dict) -> None:
+    hist = storage.get(HISTORY_KEY) or []
+    hist.insert(0, entry)
+    storage.set(HISTORY_KEY, hist[:_HISTORY_MAX])
+
+
+def get_history(rep_id: str | None = None, limit: int = 20) -> list[dict]:
+    hist = storage.get(HISTORY_KEY) or []
+    if rep_id:
+        hist = [h for h in hist if h.get("report_id") == rep_id]
+    return hist[:limit]
+
+
+def _record_history(rep: dict, out: dict | None, trigger: str,
+                    test_to: str | None, error: str | None = None) -> None:
+    """Guarda una ejecución en el historial: fecha/hora, disparador y a quién se envió."""
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "report_id": rep.get("id"), "report_name": rep.get("nombre"), "tipo": rep.get("tipo"),
+        "trigger": trigger, "test_to": test_to or None,
+    }
+    if error is not None:
+        entry.update({"ok": False, "error": error, "total": 0, "enviados": 0, "destinatarios": []})
+    else:
+        res = (out or {}).get("result") or {}
+        dests = [{"email": r.get("email"), "status": r.get("status"),
+                  "nombre": r.get("nombre", ""), "detail": r.get("detail", "")}
+                 for r in res.get("resultados", [])]
+        entry.update({"ok": True, "total": res.get("total", len(dests)),
+                      "enviados": res.get("enviados", 0), "destinatarios": dests})
+    try:
+        add_history(entry)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo guardar el historial de envío: %s", exc)
 
 
 # ── Datos (Koha + cuotas, con credenciales de servicio) ─────────────────────
@@ -425,6 +466,11 @@ async def run_socios(rep: dict, test_to: str | None = None) -> dict:
     if test_to:
         recs = recs[:1]   # prueba: una sola muestra
     res = await mail.send_campaign(rep["subject"], _body_tpl(rep), recs, dry_run=False, test_to=test_to)
+    # Completa el nombre en cada resultado (para el historial "a quién se envió").
+    name_by = {(r.get("email") or ""): (r.get("vars") or {}).get("nombre", "") for r in recs}
+    for x in res.get("resultados", []):
+        if not x.get("nombre"):
+            x["nombre"] = name_by.get(x.get("email") or "", "")
     return {"stats": {"socios": len(data["recipients"]), "con_email": data["con_email"],
                       "sin_email": data["sin_email"], "prueba": bool(test_to)}, "result": res}
 
@@ -434,8 +480,15 @@ async def preview_report(rep: dict) -> dict:
     return await (build_interno(rep) if rep["tipo"] == "interno" else build_socios(rep))
 
 
-async def run_report(rep: dict, test_to: str | None = None) -> dict:
-    return await (run_interno(rep, test_to) if rep["tipo"] == "interno" else run_socios(rep, test_to))
+async def run_report(rep: dict, test_to: str | None = None, trigger: str = "manual") -> dict:
+    trig = "prueba" if test_to else trigger
+    try:
+        out = await (run_interno(rep, test_to) if rep["tipo"] == "interno" else run_socios(rep, test_to))
+    except Exception as exc:
+        _record_history(rep, None, trig, test_to, error=str(exc))
+        raise
+    _record_history(rep, out, trig, test_to)
+    return out
 
 
 # ── Programador (chequeo diario) ────────────────────────────────────────────
@@ -453,7 +506,7 @@ async def tick() -> None:
             except ValueError:
                 pass
         try:
-            await run_report(rep)
+            await run_report(rep, trigger="auto")
             _mark_run(rep["id"], today.isoformat())
             logger.info("Reporte automático '%s' ejecutado.", rep.get("nombre"))
         except Exception as exc:  # noqa: BLE001

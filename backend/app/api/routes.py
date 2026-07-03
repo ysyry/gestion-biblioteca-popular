@@ -625,6 +625,13 @@ async def auto_run(rid: str, body: dict = Body(default={}), _: str = Depends(get
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/auto/history/{rid}", tags=["auto"])
+async def auto_history(rid: str, limit: int = Query(20, ge=1, le=100),
+                       _: str = Depends(get_current_username)):
+    """Historial de ejecuciones de un reporte: cuándo, cómo se disparó y a quién se envió."""
+    return {"items": auto_mail.get_history(rid, limit)}
+
+
 # ── Warmup: precalienta los cachés más consultados al arrancar ────────────────
 async def warmup() -> None:
     """Precarga en segundo plano los datos que gatean las primeras pantallas
