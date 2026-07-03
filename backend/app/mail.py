@@ -79,6 +79,20 @@ def html_table(headers: list[str], rows: list[list]) -> str:
             f'<tr>{th}</tr>{body}</table>')
 
 
+# Encabezados unificados de la tabla de libros que ve el socio (mails y automáticos).
+LIBROS_HEADERS = ["Libro", "Vencimiento"]
+
+
+def libros_table(items: list[dict]) -> str:
+    """Tabla HTML unificada de libros para el socio: columnas 'Libro' y 'Vencimiento' (fecha).
+
+    `items`: lista de {"titulo": str, "fecha": str}. Fuente única para que el
+    compositor de mails y los envíos automáticos muestren exactamente lo mismo.
+    """
+    return html_table(LIBROS_HEADERS,
+                      [[i.get("titulo") or "(sin título)", i.get("fecha") or ""] for i in items])
+
+
 def _wrap_html(inner: str) -> str:
     """Envuelve el cuerpo en la plantilla de marca (logo + cinta de colores + pie)."""
     if settings.app_public_url:

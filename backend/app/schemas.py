@@ -20,6 +20,9 @@ class MailRecipient(BaseModel):
     vars: dict[str, str] = {}        # nombre, apellido, carnet, etc.
     subject: str | None = None       # override individual (opcional)
     body: str | None = None          # override individual (opcional)
+    # Libros del socio por categoría ({"vencidos"|"por_vencer"|"prestamos": [{"titulo","fecha"}]}).
+    # Si vienen, el backend arma la tabla HTML unificada (igual que los automáticos).
+    loans: dict[str, list[dict]] | None = None
 
 
 class MailSendRequest(BaseModel):

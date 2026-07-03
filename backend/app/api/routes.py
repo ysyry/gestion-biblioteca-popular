@@ -409,6 +409,14 @@ async def mail_send(body: MailSendRequest, _: str = Depends(get_current_username
     dry_run = settings.mail_dry_run if body.dry_run is None else body.dry_run
     recipients = [r.model_dump() for r in body.recipients]
 
+    # Tablas HTML unificadas de libros (misma presentación que los automáticos).
+    for r in recipients:
+        loans = r.get("loans")
+        if loans:
+            blocks = {k: mail.libros_table(v) for k, v in loans.items() if isinstance(v, list) and v}
+            if blocks:
+                r["html"] = blocks
+
     # Enriquece con la deuda de cuota por carnet, así {{meses_debe}}/{{meses_impagos}}
     # funcionan aunque el socio se haya agregado por búsqueda (no solo desde el cruce).
     usa_cuota = "{{meses_debe}}" in (body.body or "") or "{{meses_impagos}}" in (body.body or "")

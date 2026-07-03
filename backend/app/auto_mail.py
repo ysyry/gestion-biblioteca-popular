@@ -277,9 +277,9 @@ async def build_interno(rep: dict) -> dict:
         "total_deudores_cuota": "0", "lista_cuotas": "ninguno",
     }
     html_blocks = {
-        "lista_vencidos": mail.html_table(["N° socio", "Socio", "Libro", "Venció", "Atraso"],
+        "lista_vencidos": mail.html_table(["N° socio", "Socio", "Libro", "Vencimiento", "Atraso"],
                                           [[car(r), nom(r), _titulo(r), _d(r.get("date_due")), f"{_dias(r)} días"] for r in venc]),
-        "lista_por_vencer": mail.html_table(["N° socio", "Socio", "Libro", "Vence"],
+        "lista_por_vencer": mail.html_table(["N° socio", "Socio", "Libro", "Vencimiento"],
                                             [[car(r), nom(r), _titulo(r), _d(r.get("date_due"))] for r in porv]),
     }
     stats = {"vencidos": len(venc), "por_vencer": len(porv)}
@@ -383,8 +383,8 @@ async def _socios_recipients(rep: dict) -> dict:
                 "meses_impagos": ", ".join(s.get("impagos", [])) or "—",
             },
             "html": {
-                "vencidos": mail.html_table(["Libro", "Venció"], [[_titulo(l), _d(l.get("date_due"))] for l in venc]),
-                "por_vencer": mail.html_table(["Libro", "Vence"], [[_titulo(l), _d(l.get("date_due"))] for l in porv]),
+                "vencidos": mail.libros_table([{"titulo": _titulo(l), "fecha": _d(l.get("date_due"))} for l in venc]),
+                "por_vencer": mail.libros_table([{"titulo": _titulo(l), "fecha": _d(l.get("date_due"))} for l in porv]),
             },
             "subject": None, "body": None,
             "_carnet": carnet, "_vencidos": len(venc), "_porvencer": len(porv), "_debe": s.get("debe", 0),

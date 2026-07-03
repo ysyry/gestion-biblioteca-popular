@@ -855,11 +855,16 @@ function ctxVars(venc, porv, todos){
     cantidad_prestamos: String(todos.length),
   };
 }
+// Libros estructurados por categoría → el backend arma la tabla HTML unificada.
+function booksVars(venc, porv, todos){
+  const m = l=>({titulo:l.title||l.barcode||"(sin título)", fecha:fecha(l.date_due)||""});
+  return { vencidos:venc.map(m), por_vencer:porv.map(m), prestamos:todos.map(m) };
+}
 function ctxFromLoans(loans){
   const today=new Date().toISOString().slice(0,10);
   const venc=[], porv=[];
   (loans||[]).forEach(l=>{ const d=fecha(l.date_due); if(!d) return; (d<today?venc:porv).push(l); });
-  return ctxVars(venc, porv, loans||[]);
+  return { vars: ctxVars(venc, porv, loans||[]), books: booksVars(venc, porv, loans||[]) };
 }
 function tplRender(tpl, vars){ return (tpl||"").replace(/{{\s*(\w+)\s*}}/g,(m,k)=> k in vars ? vars[k] : m); }
 
@@ -886,7 +891,8 @@ window.addFromSearch=async function(s){
   const r={carnet:s.cardnumber,nombre:s.firstname,apellido:s.surname,email:s.email,ctx:null};
   recipients.push(r); renderRecipients(); updatePreview();
   try { const d=await api(`/api/members/${encodeURIComponent(s.cardnumber)}/profile`);
-        r.ctx=ctxFromLoans(d.prestamos_vigentes); renderRecipients(); updatePreview(); } catch(_){}
+        const res=ctxFromLoans(d.prestamos_vigentes); r.ctx=res.vars; r.books=res.books;
+        renderRecipients(); updatePreview(); } catch(_){}
 };
 
 async function mailDoSearch(){
@@ -908,7 +914,7 @@ async function mailDoSearch(){
 function ctxFromContact(loans){
   const venc=loans.filter(l=>Number(l.dias_atraso)>0);
   const porv=loans.filter(l=>Number(l.dias_atraso)<=0);
-  return ctxVars(venc, porv, loans);
+  return { vars: ctxVars(venc, porv, loans), books: booksVars(venc, porv, loans) };
 }
 // kind: 'overdue' = socios con algún vencido · 'upcoming' = socios con algún por vencer
 async function addByStatus(kind, btn){
@@ -924,8 +930,9 @@ async function addByStatus(kind, btn){
       if(kind==="overdue" && !tieneVenc) return;
       if(kind==="upcoming" && !tienePorV) return;
       if(recipients.some(x=>x.carnet===info.cardnumber)) return;
+      const res=ctxFromContact(loans);  // vencidos Y en préstamo completos
       recipients.push({carnet:info.cardnumber,nombre:info.firstname,apellido:info.surname,
-        email:info.email, ctx:ctxFromContact(loans)});  // vencidos Y por vencer completos
+        email:info.email, ctx:res.vars, books:res.books});
       agregados++;
     });
     renderRecipients(); updatePreview();
@@ -986,7 +993,7 @@ async function mailSend(){
   const lista = test_to ? recipients.slice(0,1) : recipients;
   const payload={ subject, body, dry_run:false, test_to,
     recipients: lista.map(r=>({ email:r.email||null, vars:recipVars(r),
-      subject:r.subjectOverride??null, body:r.bodyOverride??null })) };
+      subject:r.subjectOverride??null, body:r.bodyOverride??null, loans:r.books||null })) };
   const n = lista.filter(r=>r.email).length;
   const restore=btnBusy($("mailSendBtn"), test_to?"Enviando prueba…":"Enviando…");
   $("mailResult").innerHTML=busyLine(test_to?"Enviando la prueba…":`Enviando a ${n} socio(s)…`,"esto puede tardar unos segundos");

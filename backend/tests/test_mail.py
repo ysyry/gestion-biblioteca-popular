@@ -26,6 +26,24 @@ def test_html_table_vacia_y_con_datos():
     assert "El Eternauta" in t and "<table" in t
 
 
+def test_libros_table_unificada():
+    # La tabla que ve el socio: columnas fijas "Libro" y "Vencimiento" (fecha).
+    t = mail.libros_table([{"titulo": "Rayuela", "fecha": "2026-06-20"}])
+    assert "Libro" in t and "Vencimiento" in t
+    assert "Rayuela" in t and "2026-06-20" in t
+    assert "(sin título)" in mail.libros_table([{"fecha": "2026-06-20"}])  # sin título → placeholder
+
+
+def test_render_html_usa_tabla_de_libros_unificada():
+    # Mecanismo que ahora usa también el compositor: loans → libros_table → bloque HTML.
+    tabla = mail.libros_table([{"titulo": "Ficciones", "fecha": "2026-07-10"}])
+    out = mail.render_html("Tus libros:\n{{por_vencer}}",
+                           {"por_vencer": "• Ficciones (vence 2026-07-10)"},
+                           {"por_vencer": tabla})
+    assert "<table" in out and "Ficciones" in out and "Vencimiento" in out
+    assert "• Ficciones" not in out          # con tabla HTML, no se usa el texto plano
+
+
 async def test_send_campaign_dry_run_no_envia():
     res = await mail.send_campaign("Asunto", "Cuerpo", [{"email": "a@b.com", "vars": {}}], dry_run=True)
     assert res["simulados"] == 1 and res["enviados"] == 0
