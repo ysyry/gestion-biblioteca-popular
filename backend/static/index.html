@@ -490,7 +490,7 @@
       <div id="listView" class="card">
         <div id="loansSubtabs" class="subtabs hide">
           <button data-sub="todos" class="active">Todos</button>
-          <button data-sub="aldia">Al día</button>
+          <button data-sub="aldia">En préstamo</button>
           <button data-sub="vencidos">Vencidos</button>
         </div>
         <div id="listFilter" class="toolbar hide">
@@ -682,7 +682,7 @@ function selectTab(tab){
     ensureCuotaMap().then(()=>{ updatePreview(); }); }
   else if (tab==="auto") { loadAuto(); }
 }
-function estadoBadge(v){ return Number(v)>0 ? '<span class="badge red">Vencido</span>' : '<span class="badge green">Al día</span>'; }
+function estadoBadge(v){ return Number(v)>0 ? '<span class="badge red">Vencido</span>' : '<span class="badge green">En préstamo</span>'; }
 const TODOS_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha],["Estado","dias_atraso",estadoBadge]];
 const ALDIA_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha]];
 const VENC_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Teléfono","phone"],["Título","title"],["Venció","date_due",fecha],["Atraso","dias_atraso",(v)=>`<span class="badge red">${v} días</span>`]];
@@ -1045,7 +1045,7 @@ async function loadStats(fresh){
       <div class="kpi-grid">
         ${statKpi(s.total_vigentes,"Préstamos activos")}
         ${statKpi(s.vencidos,"Vencidos","warn")}
-        ${statKpi(s.por_vencer,"En préstamo (al día)","ok")}
+        ${statKpi(s.por_vencer,"En préstamo","ok")}
         ${statKpi(s.pct_vencidos+"%","% vencidos", s.pct_vencidos>=40?"warn":"")}
         ${statKpi(s.socios_con_prestamos,"Socios con préstamos")}
         ${statKpi(s.socios_con_vencidos,"Socios que deben","warn")}
@@ -1058,7 +1058,7 @@ async function loadStats(fresh){
     mkChart('#chEstado', {
       chart:{ type:'donut', height:300, fontFamily:CH_FONT, animations:{speed:600} },
       series:[ b.por_vencer, b.venc_1_30, b.venc_31_90, b.venc_90 ],
-      labels:['En préstamo (al día)','Vencidos 1-30 días','Vencidos 31-90 días','Vencidos +90 días'],
+      labels:['En préstamo','Vencidos 1-30 días','Vencidos 31-90 días','Vencidos +90 días'],
       colors:['#15AA6C','#FBB016','#F5821F','#C7002A'], legend:{position:'bottom', fontSize:'.78rem'},
       stroke:{width:2,colors:['#fff']}, dataLabels:{ formatter:v=>Math.round(v)+'%' },
       plotOptions:{ pie:{ donut:{ size:'66%', labels:{ show:true, value:{fontSize:'1.6rem',fontWeight:700,color:'#13235B'},
