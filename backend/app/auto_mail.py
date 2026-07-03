@@ -224,7 +224,13 @@ async def _cuota_map() -> dict:
 
 
 def _d(s) -> str:
-    return (s or "")[:10]
+    """Fecha para mostrar en los mails, en formato argentino DD/MM/AAAA."""
+    s = (s or "")[:10]
+    try:
+        y, m, d = s.split("-")
+        return f"{d}/{m}/{y}"
+    except ValueError:
+        return s
 
 
 def _dias(row) -> int | None:

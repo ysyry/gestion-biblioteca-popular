@@ -842,10 +842,12 @@ function ctxCuota(debe, impagos){
   return { meses_debe:String(debe||0), meses_impagos:(impagos&&impagos.length)?impagos.join(", "):"—" };
 }
 
-// Calcula las etiquetas de libros (vencidos / por vencer) a partir de una lista de préstamos.
+// Fecha en formato argentino DD/MM/AAAA (solo para mostrar en mails).
+function fechaAR(v){ const p=fecha(v).split("-"); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : fecha(v); }
+// Calcula las etiquetas de libros (vencidos / en préstamo) a partir de una lista de préstamos.
 function ctxVars(venc, porv, todos){
-  const fmtV = l=>`• ${l.title||l.barcode||"(sin título)"} (venció ${fecha(l.date_due)||"?"})`;
-  const fmtP = l=>`• ${l.title||l.barcode||"(sin título)"} (vence ${fecha(l.date_due)||"?"})`;
+  const fmtV = l=>`• ${l.title||l.barcode||"(sin título)"} (venció ${fechaAR(l.date_due)||"?"})`;
+  const fmtP = l=>`• ${l.title||l.barcode||"(sin título)"} (vence ${fechaAR(l.date_due)||"?"})`;
   return {
     vencidos: venc.length ? venc.map(fmtV).join("\n") : "ninguno",
     por_vencer: porv.length ? porv.map(fmtP).join("\n") : "ninguno",
@@ -857,7 +859,7 @@ function ctxVars(venc, porv, todos){
 }
 // Libros estructurados por categoría → el backend arma la tabla HTML unificada.
 function booksVars(venc, porv, todos){
-  const m = l=>({titulo:l.title||l.barcode||"(sin título)", fecha:fecha(l.date_due)||""});
+  const m = l=>({titulo:l.title||l.barcode||"(sin título)", fecha:fechaAR(l.date_due)||""});
   return { vencidos:venc.map(m), por_vencer:porv.map(m), prestamos:todos.map(m) };
 }
 function ctxFromLoans(loans){

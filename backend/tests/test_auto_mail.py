@@ -65,6 +65,12 @@ def test_migracion_v1_renombra_y_agrega_lectura(store):
 """Tests de la lógica de préstamos y exclusiones."""
 
 
+def test_d_formatea_fecha_argentina():
+    assert auto_mail._d("2026-06-15") == "15/06/2026"
+    assert auto_mail._d("2026-06-15T00:00:00") == "15/06/2026"   # recorta la hora
+    assert auto_mail._d("") == "" and auto_mail._d(None) == ""
+
+
 def test_split_loans():
     rows = [{"dias_atraso": "5"}, {"dias_atraso": "-2"}, {"dias_atraso": "-30"}, {"dias_atraso": None}]
     venc, porv = auto_mail._split_loans(rows, dias_antes=3, umbral_atraso=1)
