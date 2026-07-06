@@ -258,6 +258,10 @@
   .mcell.debe { background:#fbe2e7; color:var(--red); }
   .mcell.na { background:#eef0f3; color:#b7bcc6; }
   .mcell.fut { background:#f6f7f9; color:#d2d6dd; }
+  .mcell.ov { box-shadow:inset 0 0 0 2px var(--magenta); }   /* pago cargado desde la app */
+  td.mes.clk { cursor:pointer; }
+  td.mes.clk:hover .mcell { outline:2px solid var(--magenta); outline-offset:1px; }
+  td.mes.saving { opacity:.45; pointer-events:none; }
   .cuotas-table tr.deuda td.nm { font-weight:600; }
   .badge.deuda { background:#fbe2e7; color:var(--red); }
   .badge.aldia { background:#dff3e8; color:var(--green); }
@@ -1429,7 +1433,8 @@ function cuotasNoConfig(){
     <p class="meta">Falta configurar la credencial de Google (cuenta de servicio) y el id de la planilla. Avisá y lo cargamos.</p></div>`;
 }
 function mcell(m){
-  if(m.estado==='pago') return `<span class="mcell pago" title="${m.mes}: pagó">P</span>`;
+  if(m.estado==='pago'){ const t=m.app?`${m.mes}: pagó (cargado en la app${m.app_por?' por '+m.app_por:''})`:`${m.mes}: pagó`;
+    return `<span class="mcell pago${m.app?' ov':''}" title="${esc(t)}">P</span>`; }
   if(m.estado==='na')   return `<span class="mcell na" title="${m.mes}: no corresponde">–</span>`;
   if(!m.vencido)        return `<span class="mcell fut" title="${m.mes}: no vencido"></span>`;
   return `<span class="mcell debe" title="${m.mes}: debe">·</span>`;
@@ -1467,7 +1472,11 @@ function cuTh(key,label,cls){
 function cuotasFila(s){
   return `<tr class="${s.estado==='debe'?'deuda':''}">
     <td class="nm">${esc(s.apellido)}, ${esc(s.nombre)}</td><td>${esc(s.matricula)}</td><td>${esc(s.categoria)}</td>
-    ${s.meses.map(m=>`<td class="mes">${mcell(m)}</td>`).join("")}
+    ${s.meses.map((m,i)=>{
+      const sheetPago = m.estado==='pago' && !m.app;   // pago que viene de la planilla: no se edita acá
+      const clk = sheetPago ? '' : ' clk';
+      return `<td class="mes${clk}"${clk?` data-mat="${esc(String(s.matricula))}" data-m="${i}"`:''}>${mcell(m)}</td>`;
+    }).join("")}
     <td>${s.estado==='debe'?`<span class="badge deuda">debe ${s.debe}</span>`:'<span class="badge aldia">al día</span>'}</td>
     <td class="nm">${s.ultimo_pago?esc(s.ultimo_pago.label):'<span style="color:var(--muted)">sin pagos</span>'}</td></tr>`;
 }
@@ -1496,7 +1505,7 @@ function renderCuotas(){
         <tbody id="cuBody"></tbody>
       </table>
       <div class="ag-toolbar" style="margin:.7rem 0 0; justify-content:space-between">
-        <div class="meta"><span class="mcell pago" style="vertical-align:middle">P</span> pagó · <span class="mcell debe" style="vertical-align:middle">·</span> debe · <span class="mcell na" style="vertical-align:middle">–</span> no corresponde</div>
+        <div class="meta"><span class="mcell pago" style="vertical-align:middle">P</span> pagó · <span class="mcell debe" style="vertical-align:middle">·</span> debe · <span class="mcell na" style="vertical-align:middle">–</span> no corresponde · <span class="mcell pago ov" style="vertical-align:middle">P</span> cargado en la app · <b>hacé clic</b> en un mes para cargar/quitar un pago</div>
         <div class="ag-nav"><button id="cuPrev">‹</button><span class="meta" id="cuInfo"></span><button id="cuNext">›</button></div>
       </div>
     </div>`;
@@ -1514,11 +1523,26 @@ function renderCuotasPage(){
   if(cuotasFiltro.page>=pages) cuotasFiltro.page=pages-1;
   const ini=cuotasFiltro.page*CU_PAGE, slice=socios.slice(ini, ini+CU_PAGE);
   const tb=$("cuBody"); if(!tb) return;
-  tb.innerHTML = slice.length ? slice.map(cuotasFila).join("") : `<tr><td colspan="16" class="empty">Sin resultados.</td></tr>`;
+  tb.innerHTML = slice.length ? slice.map(cuotasFila).join("") : `<tr><td colspan="17" class="empty">Sin resultados.</td></tr>`;
+  tb.querySelectorAll("td.mes.clk").forEach(td=>td.onclick=()=>togglePago(td.dataset.mat, +td.dataset.m, td));
   const info=$("cuInfo"); if(info) info.textContent = tot ? `${ini+1}–${Math.min(ini+CU_PAGE,tot)} de ${tot}` : "0";
   const prev=$("cuPrev"), next=$("cuNext");
   if(prev) prev.disabled = cuotasFiltro.page<=0;
   if(next) next.disabled = (cuotasFiltro.page+1)*CU_PAGE>=tot;
+}
+// Carga/quita un pago desde la app (se guarda y se superpone a la planilla).
+async function togglePago(mat, mesIdx, td){
+  const s=cuotasData.socios.find(x=>String(x.matricula)===String(mat)); if(!s) return;
+  const m=s.meses[mesIdx];
+  if(m.estado==='pago' && !m.app) return;         // pago de la planilla: no se edita
+  const pagado=!m.app;                            // si ya lo cargó la app → lo quita; si no → lo marca
+  if(!pagado && !(await uiConfirm({title:"Quitar pago", message:`¿Quitar el pago de <b>${esc(m.mes)} ${cuotasAnio}</b> de ${esc(s.apellido)}, ${esc(s.nombre)}?`, ok:"Quitar", danger:true}))) return;
+  td.classList.add("saving");
+  try {
+    await api("/api/cuotas/pago",{method:"POST",body:JSON.stringify({matricula:mat, anio:cuotasAnio, mes:mesIdx+1, pagado})});
+    const d=await api("/api/cuotas?anio="+cuotasAnio);   // relee con el pago ya superpuesto
+    cuotasData=d; renderCuotas();
+  } catch(err){ td.classList.remove("saving"); await uiConfirm({title:"No se pudo guardar", message:esc(err.message), ok:"Entendido"}); }
 }
 
 // ── Automáticos (reportes configurables en tabs) ───────────────────────────

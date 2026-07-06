@@ -21,6 +21,8 @@ import os
 import time
 from pathlib import Path
 
+from . import pagos
+
 logger = logging.getLogger("cuotas")
 
 SHEET_ID = os.getenv("PAGOS_SHEET_ID", "1SDw0Xes3kPBUMmUaj9mOY5aPnu4577a_SUupKAk8F3o")
@@ -93,17 +95,21 @@ def _estado_mes(v: str) -> str:
     return "debe"          # vacío u otra marca
 
 
-def _ultimo_pago(r: list[str]) -> dict | None:
-    """Mes más reciente con 'P' del socio, mirando TODOS los años de la planilla.
+def _ultimo_pago(r: list[str], ov: dict | None = None) -> dict | None:
+    """Mes más reciente con pago del socio, mirando TODOS los años (planilla + app).
 
     Devuelve {'mes','anio','label','ord'} o None si nunca pagó. `ord` = anio*100+mes,
     sirve para ordenar. Cubre el caso de que el último pago sea de un año anterior.
+    `ov` = meses pagos cargados en la app ({'AAAA-MM': ...}).
     """
+    ov = ov or {}
     mejor = None  # (anio, indice_mes 0-11)
     for anio, col0 in YEAR_BLOCKS.items():
         for m in range(12):
             c = col0 + m
-            if len(r) > c and _estado_mes(r[c]) == "pago":
+            en_planilla = len(r) > c and _estado_mes(r[c]) == "pago"
+            en_app = f"{anio:04d}-{m + 1:02d}" in ov
+            if en_planilla or en_app:
                 if mejor is None or (anio, m) > mejor:
                     mejor = (anio, m)
     if mejor is None:
@@ -121,33 +127,40 @@ def estado_cuotas(anio: int) -> dict:
 
     hoy = dt.date.today()
     mes_tope = hoy.month if anio == hoy.year else 12  # año en curso: hasta el mes actual
+    pagos_app = pagos.all_pagos()   # pagos cargados desde la app (se superponen a la planilla)
 
     socios = []
     for r in rows[2:]:  # filas 0 y 1 son encabezados
         if len(r) < 5 or not (r[1] or "").strip():   # sin matrícula → no es socio
             continue
+        ov = pagos_app.get((r[1] or "").strip(), {})   # {'AAAA-MM': {ts, por}}
         meses = []
-        pagos = debe = 0
+        pagos_n = debe = 0
         for m in range(12):
             c = col0 + m
             est = _estado_mes(r[c]) if len(r) > c else "debe"
+            mk = f"{anio:04d}-{m + 1:02d}"
+            desde_app = mk in ov
+            if desde_app:
+                est = "pago"
             vencido = (m + 1) <= mes_tope
             if est == "pago":
-                pagos += 1
+                pagos_n += 1
             elif est == "debe" and vencido:
                 debe += 1
-            meses.append({"mes": MESES[m], "estado": est, "vencido": vencido})
+            meses.append({"mes": MESES[m], "estado": est, "vencido": vencido,
+                          "app": desde_app, "app_por": ov.get(mk, {}).get("por", "") if desde_app else ""})
         socios.append({
             "matricula": (r[1] or "").strip(),
             "apellido": (r[2] or "").strip() if len(r) > 2 else "",
             "nombre": (r[3] or "").strip() if len(r) > 3 else "",
             "categoria": (r[4] or "").strip() if len(r) > 4 else "",
             "meses": meses,
-            "pagos": pagos,
+            "pagos": pagos_n,
             "debe": debe,
             "impagos": [x["mes"] for x in meses if x["estado"] == "debe" and x["vencido"]],
             "estado": "al_dia" if debe == 0 else "debe",
-            "ultimo_pago": _ultimo_pago(r),   # último mes pago + año (mirando todos los años)
+            "ultimo_pago": _ultimo_pago(r, ov),   # último mes pago + año (planilla + app)
         })
 
     total = len(socios)

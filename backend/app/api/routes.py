@@ -19,6 +19,7 @@ from .. import mail
 from .. import auto_mail
 from .. import agenda
 from .. import cuotas
+from .. import pagos
 from .. import cache
 from ..config import settings
 
@@ -498,6 +499,32 @@ async def cuotas_estado(
         raise HTTPException(status_code=502, detail=f"No se pudo leer la planilla: {exc}") from exc
     data["configured"] = True
     return data
+
+
+@router.post("/cuotas/pago", tags=["cuotas"])
+async def cuotas_pago(body: dict = Body(...), user: str = Depends(get_current_username)):
+    """Carga (o quita) un pago de cuota desde la app: {matricula, anio, mes, pagado}.
+
+    Se guarda en la base de la app y se superpone a la planilla (que no se toca).
+    """
+    mat = str((body or {}).get("matricula") or "").strip()
+    try:
+        anio = int((body or {}).get("anio"))
+        mes = int((body or {}).get("mes"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="anio y mes deben ser números.")
+    pagado = bool((body or {}).get("pagado"))
+    try:
+        res = await asyncio.to_thread(pagos.set_pago, mat, anio, mes, pagado, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **res}
+
+
+@router.get("/cuotas/pagos", tags=["cuotas"])
+async def cuotas_pagos_all(_: str = Depends(get_current_username)):
+    """Todos los pagos cargados desde la app (registro/auditoría)."""
+    return {"pagos": await asyncio.to_thread(pagos.all_pagos)}
 
 
 # ── Cruce de datos: Koha (préstamos) vs planilla (cuotas) ──────────────────────
