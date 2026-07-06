@@ -1440,6 +1440,7 @@ function cuSortVal(s){
     case 'matricula': return Number(s.matricula)||s.matricula;
     case 'categoria': return (s.categoria||"").toLowerCase();
     case 'estado': return s.estado==='debe'? s.debe : -1; // al día primero al asc
+    case 'ultimo': return s.ultimo_pago? s.ultimo_pago.ord : -1; // sin pagos al final
     default: return 0;
   }
 }
@@ -1467,7 +1468,8 @@ function cuotasFila(s){
   return `<tr class="${s.estado==='debe'?'deuda':''}">
     <td class="nm">${esc(s.apellido)}, ${esc(s.nombre)}</td><td>${esc(s.matricula)}</td><td>${esc(s.categoria)}</td>
     ${s.meses.map(m=>`<td class="mes">${mcell(m)}</td>`).join("")}
-    <td>${s.estado==='debe'?`<span class="badge deuda">debe ${s.debe}</span>`:'<span class="badge aldia">al día</span>'}</td></tr>`;
+    <td>${s.estado==='debe'?`<span class="badge deuda">debe ${s.debe}</span>`:'<span class="badge aldia">al día</span>'}</td>
+    <td class="nm">${s.ultimo_pago?esc(s.ultimo_pago.label):'<span style="color:var(--muted)">sin pagos</span>'}</td></tr>`;
 }
 function renderCuotas(){
   const d=cuotasData;
@@ -1490,7 +1492,7 @@ function renderCuotas(){
     </div>
     <div class="card" style="overflow-x:auto">
       <table class="cuotas-table">
-        <thead><tr>${cuTh('socio','Socio')}${cuTh('matricula','Matríc.')}${cuTh('categoria','Categoría')}${mesesTh}${cuTh('estado','Estado')}</tr></thead>
+        <thead><tr>${cuTh('socio','Socio')}${cuTh('matricula','Matríc.')}${cuTh('categoria','Categoría')}${mesesTh}${cuTh('estado','Estado')}${cuTh('ultimo','Último pago')}</tr></thead>
         <tbody id="cuBody"></tbody>
       </table>
       <div class="ag-toolbar" style="margin:.7rem 0 0; justify-content:space-between">

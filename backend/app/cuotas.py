@@ -93,6 +93,25 @@ def _estado_mes(v: str) -> str:
     return "debe"          # vacío u otra marca
 
 
+def _ultimo_pago(r: list[str]) -> dict | None:
+    """Mes más reciente con 'P' del socio, mirando TODOS los años de la planilla.
+
+    Devuelve {'mes','anio','label','ord'} o None si nunca pagó. `ord` = anio*100+mes,
+    sirve para ordenar. Cubre el caso de que el último pago sea de un año anterior.
+    """
+    mejor = None  # (anio, indice_mes 0-11)
+    for anio, col0 in YEAR_BLOCKS.items():
+        for m in range(12):
+            c = col0 + m
+            if len(r) > c and _estado_mes(r[c]) == "pago":
+                if mejor is None or (anio, m) > mejor:
+                    mejor = (anio, m)
+    if mejor is None:
+        return None
+    anio, m = mejor
+    return {"mes": MESES[m], "anio": anio, "label": f"{MESES[m]} {anio}", "ord": anio * 100 + (m + 1)}
+
+
 def estado_cuotas(anio: int) -> dict:
     """Devuelve el estado de cuotas de todos los socios para un año."""
     if anio not in YEAR_BLOCKS:
@@ -128,6 +147,7 @@ def estado_cuotas(anio: int) -> dict:
             "debe": debe,
             "impagos": [x["mes"] for x in meses if x["estado"] == "debe" and x["vencido"]],
             "estado": "al_dia" if debe == 0 else "debe",
+            "ultimo_pago": _ultimo_pago(r),   # último mes pago + año (mirando todos los años)
         })
 
     total = len(socios)
