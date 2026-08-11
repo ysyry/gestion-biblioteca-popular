@@ -74,6 +74,18 @@ class Settings(BaseSettings):
     # Seguridad: si está en True, NO envía de verdad (simula). Pasar a False para enviar.
     mail_dry_run: bool = True
 
+    # ── ARCA (ex-AFIP) · Factura Electrónica ────────────────────────────────
+    # Emisión de Factura C (entidad exenta) vía WSFEv1. La clave y el certificado
+    # son secretos: van en backend/credentials/ (gitignoreado), NUNCA al repo.
+    arca_enabled: bool = False        # habilita el módulo de facturación
+    arca_prod: bool = False           # False = homologación (pruebas), True = producción
+    arca_cuit: str = ""               # CUIT del emisor (ej: 30675834306)
+    arca_pto_vta: int = 0             # punto de venta habilitado (ej: 2); 0 = sin configurar
+    # Rutas al certificado (.crt/.pem) y la clave privada (.key). Si quedan vacías,
+    # se asume credentials/arca_{homo|prod}.crt y credentials/arca_{homo|prod}.key.
+    arca_cert_path: str = ""
+    arca_key_path: str = ""
+
     @field_validator(
         "report_member_search_id",
         "report_member_loans_id",
