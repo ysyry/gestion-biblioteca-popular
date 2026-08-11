@@ -6,6 +6,7 @@ import logging
 from collections import Counter
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi.responses import Response
 
 from ..auth import (
     authenticate,
@@ -17,6 +18,8 @@ from ..auth import (
 )
 from .. import mail
 from .. import auto_mail
+from .. import historial
+from .. import tracking
 from .. import agenda
 from .. import cuotas
 from .. import pagos
@@ -81,7 +84,7 @@ async def loans_overdue(repo: KohaRepository = Depends(get_repository)):
 async def loans_contact(fresh: bool = Query(False), repo: KohaRepository = Depends(get_repository)):
     """Todos los préstamos vigentes con contacto y días respecto del vencimiento.
 
-    dias_atraso > 0 → vencido; = 0 → vence hoy; < 0 → por vencer (faltan N días).
+    dias_atraso > 0 → vencido; = 0 → vence hoy; < 0 → activo (faltan N días para vencer).
     """
     return await _loans_contact_cached(repo, fresh)
 
@@ -401,20 +404,27 @@ async def mail_config(_: str = Depends(get_current_username)):
 
 
 @router.post("/mail/send", tags=["mail"])
-async def mail_send(body: MailSendRequest, _: str = Depends(get_current_username)):
+async def mail_send(body: MailSendRequest, usuario: str = Depends(get_current_username)):
     """Envía (o simula) una campaña de mail a los destinatarios seleccionados.
 
     Variables de combinación en asunto/cuerpo: {{nombre}}, {{apellido}}, {{carnet}},
     {{email}} (y las que se pasen por destinatario). Cada socio puede personalizarse.
+
+    Queda registrado en el historial (igual que los automáticos): quién lo mandó,
+    a quiénes, con qué mensaje y con qué resultado.
     """
     dry_run = settings.mail_dry_run if body.dry_run is None else body.dry_run
     recipients = [r.model_dump() for r in body.recipients]
+    if body.test_to:
+        recipients = recipients[:1]   # prueba: una sola muestra (igual que send_campaign)
 
     # Tablas HTML unificadas de libros (misma presentación que los automáticos).
+    # Los vencidos van SIN fecha: al socio se le nombra el libro, no cuándo se le pasó.
     for r in recipients:
         loans = r.get("loans")
         if loans:
-            blocks = {k: mail.libros_table(v) for k, v in loans.items() if isinstance(v, list) and v}
+            blocks = {k: mail.libros_table(v, con_fecha=(k != "vencidos"))
+                      for k, v in loans.items() if isinstance(v, list) and v}
             if blocks:
                 r["html"] = blocks
 
@@ -436,8 +446,14 @@ async def mail_send(body: MailSendRequest, _: str = Depends(get_current_username
         except Exception as exc:  # noqa: BLE001
             logger.warning("No se pudo enriquecer cuotas en mail: %s", exc)
 
+    run_id = historial.new_run_id()
+    seguimiento = historial.aplicar_seguimiento(recipients, run_id)
+    comun = {"run_id": run_id, "origen": "manual", "titulo": body.subject or "(sin asunto)",
+             "tipo": "socios", "trigger": "prueba" if body.test_to else "manual",
+             "usuario": usuario, "test_to": body.test_to, "dry_run": dry_run,
+             "subject_tpl": body.subject, "body_tpl": body.body}
     try:
-        return await mail.send_campaign(
+        res = await mail.send_campaign(
             subject_tpl=body.subject,
             body_tpl=body.body,
             recipients=recipients,
@@ -445,10 +461,15 @@ async def mail_send(body: MailSendRequest, _: str = Depends(get_current_username
             test_to=body.test_to,
         )
     except RuntimeError as exc:
+        historial.record(**comun, dests=[], ok=False, error=str(exc))
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # cualquier otro error: 502 con mensaje, nunca 500 crudo
         logger.exception("mail/send falló")
+        historial.record(**comun, dests=[], ok=False, error=str(exc))
         raise HTTPException(status_code=502, detail=f"Error al enviar: {exc}") from exc
+    historial.record(**comun, seguimiento=seguimiento,
+                     dests=historial.destinatarios(recipients, res.get("resultados", [])))
+    return {**res, "run_id": run_id}
 
 
 # ── Agenda de actividades (Google Calendar, solo lectura) ──────────────────────
@@ -641,13 +662,15 @@ async def auto_preview(rid: str, _: str = Depends(get_current_username)):
 
 
 @router.post("/auto/run/{rid}", tags=["auto"])
-async def auto_run(rid: str, body: dict = Body(default={}), _: str = Depends(get_current_username)):
+async def auto_run(rid: str, body: dict = Body(default={}),
+                   usuario: str = Depends(get_current_username)):
     """Ejecuta un reporte ahora. Si se pasa test_to, manda una prueba a esa dirección."""
     rep = auto_mail.get_report(rid)
     if not rep:
         raise HTTPException(status_code=404, detail="Reporte desconocido.")
     try:
-        return await auto_mail.run_report(rep, test_to=(body or {}).get("test_to") or None)
+        return await auto_mail.run_report(rep, test_to=(body or {}).get("test_to") or None,
+                                          usuario=usuario)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -657,6 +680,49 @@ async def auto_history(rid: str, limit: int = Query(20, ge=1, le=100),
                        _: str = Depends(get_current_username)):
     """Historial de ejecuciones de un reporte: cuándo, cómo se disparó y a quién se envió."""
     return {"items": auto_mail.get_history(rid, limit)}
+
+
+# ── Historial de envíos (automáticos + manuales) ──────────────────────────────
+@router.get("/envios", tags=["envios"])
+async def envios_listar(origen: str | None = Query(None, pattern="^(auto|manual)$"),
+                        report_id: str | None = Query(None),
+                        limit: int = Query(50, ge=1, le=200),
+                        _: str = Depends(get_current_username)):
+    """Lista de envíos hechos: los automáticos y los de la pestaña Mails."""
+    return {"items": historial.listar(origen=origen, report_id=report_id, limit=limit),
+            "seguimiento_activo": tracking.enabled()}
+
+
+@router.get("/envios/{run_id}", tags=["envios"])
+async def envios_detalle(run_id: str, _: str = Depends(get_current_username)):
+    """Detalle de un envío: cada destinatario, el mensaje que recibió y si lo abrió."""
+    run = historial.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Envío no encontrado (puede haber sido podado).")
+    return run
+
+
+# Píxel de apertura. PÚBLICO a propósito: lo pide el cliente de correo del socio,
+# que no tiene sesión. El token va firmado, así que no se pueden falsear aperturas.
+_PIXEL_GIF = bytes.fromhex(
+    "47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b")
+
+
+@router.get("/t/{token}", include_in_schema=False)
+async def tracking_pixel(token: str):
+    """Devuelve un GIF de 1×1 y registra la apertura. Nunca falla: si el token es
+    inválido o el envío ya se podó, igual devuelve la imagen (no filtra nada)."""
+    try:
+        parsed = tracking.parse_token(token)
+        if parsed:
+            # En un hilo: escribe en la base y no queremos frenar el event loop.
+            await asyncio.to_thread(historial.record_open, *parsed)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("No se pudo registrar la apertura: %s", exc)
+    return Response(content=_PIXEL_GIF, media_type="image/gif", headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache", "Expires": "0",
+    })
 
 
 # ── Warmup: precalienta los cachés más consultados al arrancar ────────────────

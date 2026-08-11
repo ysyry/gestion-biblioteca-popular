@@ -110,9 +110,23 @@
   .hist-item { border:1px solid var(--line); border-radius:9px; padding:.5rem .7rem; margin-bottom:.5rem; }
   .hist-top { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
   .hist-top .meta { flex:1; min-width:140px; }
-  .hist-dest { margin-top:.5rem; border-top:1px dashed var(--line); padding-top:.4rem; max-height:230px; overflow:auto; }
-  .hist-d { display:flex; justify-content:space-between; align-items:center; gap:.5rem; padding:.22rem 0; font-size:.85rem; border-bottom:1px solid #f2f3f5; }
-  .hist-d:last-child { border-bottom:none; }
+  .hist-dest { margin-top:.5rem; border-top:1px dashed var(--line); padding-top:.4rem; max-height:420px; overflow:auto; }
+  .hist-d { display:flex; justify-content:space-between; align-items:center; gap:.5rem; padding:.22rem 0; font-size:.85rem; }
+  .hist-d-wrap { border-bottom:1px solid #f2f3f5; }
+  .hist-d-wrap:last-child { border-bottom:none; }
+  .hist-tit { flex:1; min-width:120px; font-weight:600; color:var(--navy); }
+  .help-btn { border:1px solid var(--magenta); background:#fff; color:var(--magenta); border-radius:50%;
+    width:17px; height:17px; line-height:1; font-size:.72rem; font-weight:700; cursor:pointer; padding:0;
+    vertical-align:middle; margin-right:.15rem; }
+  .help-btn:hover { background:var(--magenta); color:#fff; }
+  .help-list { display:flex; flex-direction:column; gap:.5rem; max-height:52vh; overflow:auto; }
+  .help-row { display:flex; gap:.6rem; align-items:flex-start; font-size:.86rem; line-height:1.45; }
+  .help-row code { flex:0 0 auto; min-width:170px; }
+  .hist-toolbar { display:flex; align-items:center; gap:.6rem; margin-bottom:.9rem; }
+  .hist-toolbar .subtabs { margin:0; }
+  .hist-msg { margin:.1rem 0 .55rem; padding:.55rem .7rem; background:#fafbfc; border:1px solid var(--line);
+    border-radius:8px; font-size:.8rem; line-height:1.45; white-space:pre-wrap; word-break:break-word;
+    max-height:280px; overflow:auto; font-family:inherit; }
   .auto-actions { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:1rem; align-items:center; }
   .auto-actions .btn-sec { font-size:.85rem; }
   .varhint { font-size:.76rem; color:var(--muted); margin:.3rem 0 0; }
@@ -467,6 +481,7 @@
         <button data-tab="agenda">Agenda</button>
         <button data-tab="mails">Mails</button>
         <button data-tab="auto">Automáticos</button>
+        <button data-tab="envios">Historial de envíos</button>
       </nav>
       <div class="foot">
         <span class="user" id="userLabel"></span>
@@ -538,7 +553,7 @@
             <div class="meta" style="margin:.2rem 0 .6rem">
               Atajos:
               <span class="pill" id="addOverdue">+ Agregar socios con vencidos</span>
-              <span class="pill" id="addUpcoming">+ Agregar socios con libros en préstamo</span>
+              <span class="pill" id="addUpcoming">+ Agregar socios con préstamos activos</span>
             </div>
             <div id="mailSearchResults" class="scrolllist"></div>
             <div id="recipList" class="recip-box"></div>
@@ -558,11 +573,12 @@
               <code data-v="email">{{email}}</code>
             </p>
             <p class="meta vars">Libros del socio:
+              <button class="help-btn" data-help="libros" title="¿Qué significa cada etiqueta?">?</button>
               <code data-v="vencidos">{{vencidos}}</code>
-              <code data-v="por_vencer">{{por_vencer}}</code>
+              <code data-v="activos">{{activos}}</code>
               <code data-v="prestamos">{{prestamos}}</code>
               <code data-v="cantidad_vencidos">{{cantidad_vencidos}}</code>
-              <code data-v="cantidad_por_vencer">{{cantidad_por_vencer}}</code>
+              <code data-v="cantidad_activos">{{cantidad_activos}}</code>
               <code data-v="cantidad_prestamos">{{cantidad_prestamos}}</code>
             </p>
             <p class="meta vars">Cuota societaria:
@@ -587,6 +603,22 @@
         <div id="autoTabs" class="auto-tabs"></div>
         <div id="autoForm"></div>
       </div>
+
+      <!-- Historial de envíos (automáticos + Mails) -->
+      <div id="enviosView" class="hide">
+        <div class="card">
+          <div class="hist-toolbar">
+            <div class="subtabs" id="enviosFiltro">
+              <button data-origen="" class="active">Todos</button>
+              <button data-origen="auto">Automáticos</button>
+              <button data-origen="manual">Mails</button>
+            </div>
+            <button class="btn-refresh" id="enviosRef">↻</button>
+          </div>
+          <div id="enviosAviso"></div>
+          <div id="enviosLista"></div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -594,7 +626,7 @@
 <script>
 let token = localStorage.getItem("token") || "";
 let currentTab = "active";
-const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", cuotas:"Cuotas societarias", agenda:"Agenda de actividades", mails:"Envío de mails", auto:"Envíos automáticos" };
+const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", cuotas:"Cuotas societarias", agenda:"Agenda de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos" };
 let loanSub = "todos";
 let loansAll = null;  // cache de loans_contact mientras se está en la pestaña Préstamos
 
@@ -632,6 +664,50 @@ function busyLine(text, hint){
          (hint?`<small>${esc(hint)}</small>`:"")+`</div>`;
 }
 // Confirmación con UI propia (reemplaza al confirm() del navegador). Devuelve Promise<bool>.
+// ── Ayuda: qué significa cada etiqueta ─────────────────────────────────────
+// Un solo lugar donde se explica el vocabulario, para que la UI y los mails no
+// se desincronicen. Se abre con el "?" que está al lado de las etiquetas.
+const HELP_ETIQUETAS = {
+  libros: { titulo:"Las etiquetas de libros", intro:"Se reemplazan por los datos de cada socio al enviar el mail.", filas:[
+    ["{{vencidos}}", "Los libros que el socio <b>ya tendría que haber devuelto</b>. Va la lista de títulos, <b>sin la fecha</b>."],
+    ["{{activos}}", "Los que <b>todavía tiene en préstamo</b> y aún no vencieron. Va el título y <b>cuándo vence</b> cada uno."],
+    ["{{prestamos}}", "<b>Todos los préstamos</b> del socio: los vencidos y los activos juntos, en una sola lista."],
+    ["{{cantidad_vencidos}}", "Cuántos vencidos tiene (un número)."],
+    ["{{cantidad_activos}}", "Cuántos activos tiene (un número)."],
+    ["{{cantidad_prestamos}}", "Cuántos libros tiene en total (un número)."],
+  ]},
+  interno: { titulo:"Las etiquetas del resumen interno", intro:"Este reporte lo reciben las bibliotecarias, así que las listas incluyen el nombre del socio.", filas:[
+    ["{{lista_vencidos}}", "Todos los préstamos vencidos de la biblioteca, con socio, fecha y días de atraso."],
+    ["{{lista_activos}}", "Los préstamos activos que vencen dentro de los días configurados arriba."],
+    ["{{lista_cuotas}}", "Los socios que deben cuota (según el umbral configurado)."],
+    ["{{total_vencidos}}", "Cuántos préstamos vencidos hay en total."],
+    ["{{total_activos}}", "Cuántos préstamos activos hay en la ventana configurada."],
+    ["{{total_deudores_cuota}}", "Cuántos socios deben cuota."],
+    ["{{fecha}}", "La fecha del día en que se envía el reporte."],
+  ]},
+};
+function mostrarAyuda(clave){
+  const h=HELP_ETIQUETAS[clave]; if(!h) return;
+  const bg=document.createElement("div"); bg.className="modal-bg";
+  bg.innerHTML=`<div class="modal" style="max-width:620px">
+    <h3>${esc(h.titulo)}</h3>
+    <p class="meta" style="margin:.2rem 0 .8rem;line-height:1.5">${esc(h.intro)}</p>
+    <div class="help-list">${h.filas.map(([k,d])=>
+      `<div class="help-row"><code>${esc(k)}</code><span>${d}</span></div>`).join("")}</div>
+    <p class="meta" style="margin:.8rem 0 0;line-height:1.5">Escribí la etiqueta tal cual en el asunto o el cuerpo. En la pestaña <b>Mails</b> además podés tocarla para insertarla donde tenés el cursor.</p>
+    <div class="row-btns"><button class="primary" style="width:auto;margin:0" id="ayudaOk">Entendido</button></div></div>`;
+  document.body.appendChild(bg);
+  const close=()=>bg.remove();
+  bg.querySelector("#ayudaOk").onclick=close;
+  bg.onclick=e=>{ if(e.target===bg) close(); };
+}
+// Delegado: los formularios de Automáticos se re-renderizan, así que no sirve
+// engancharse a cada botón por separado.
+document.addEventListener("click", e=>{
+  const b=e.target.closest(".help-btn");
+  if(b){ e.preventDefault(); e.stopPropagation(); mostrarAyuda(b.dataset.help); }
+});
+
 function uiConfirm({title="Confirmar", message="", ok="Confirmar", danger=false}={}){
   return new Promise(resolve=>{
     const bg=document.createElement("div"); bg.className="modal-bg";
@@ -677,7 +753,8 @@ function selectTab(tab){
   show($("cuotasView"), tab==="cuotas");
   show($("mailsView"), tab==="mails");
   show($("autoView"), tab==="auto");
-  show($("listView"), tab!=="mails" && tab!=="auto" && tab!=="stats" && tab!=="estrategia" && tab!=="agenda" && tab!=="cuotas");
+  show($("enviosView"), tab==="envios");
+  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas"].includes(tab));
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
   show($("cruceSection"), tab==="members");
@@ -693,6 +770,7 @@ function selectTab(tab){
   else if (tab==="mails") { renderRecipients(); updatePreview();
     ensureCuotaMap().then(()=>{ updatePreview(); }); }
   else if (tab==="auto") { loadAuto(); }
+  else if (tab==="envios") { loadEnvios(); }
 }
 function estadoBadge(v){ return Number(v)>0 ? '<span class="badge red">Vencido</span>' : '<span class="badge green">En préstamo</span>'; }
 const TODOS_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha],["Estado","dias_atraso",estadoBadge]];
@@ -858,21 +936,26 @@ function ctxCuota(debe, impagos){
 function fechaAR(v){ const p=fecha(v).split("-"); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : fecha(v); }
 // Calcula las etiquetas de libros (vencidos / en préstamo) a partir de una lista de préstamos.
 function ctxVars(venc, porv, todos){
-  const fmtV = l=>`• ${l.title||l.barcode||"(sin título)"} (venció ${fechaAR(l.date_due)||"?"})`;
+  // Los vencidos van SIN fecha: al socio se le nombra el libro, no cuándo se le pasó.
+  const fmtV = l=>`• ${l.title||l.barcode||"(sin título)"}`;
   const fmtP = l=>`• ${l.title||l.barcode||"(sin título)"} (vence ${fechaAR(l.date_due)||"?"})`;
+  const activos = porv.length ? porv.map(fmtP).join("\n") : "ninguno";
   return {
     vencidos: venc.length ? venc.map(fmtV).join("\n") : "ninguno",
-    por_vencer: porv.length ? porv.map(fmtP).join("\n") : "ninguno",
+    activos,
     prestamos: todos.length ? todos.map(fmtP).join("\n") : "ninguno",
     cantidad_vencidos: String(venc.length),
-    cantidad_por_vencer: String(porv.length),
+    cantidad_activos: String(porv.length),
     cantidad_prestamos: String(todos.length),
+    // Alias del nombre viejo: las plantillas que aún digan {{por_vencer}} siguen andando.
+    por_vencer: activos, cantidad_por_vencer: String(porv.length),
   };
 }
 // Libros estructurados por categoría → el backend arma la tabla HTML unificada.
 function booksVars(venc, porv, todos){
   const m = l=>({titulo:l.title||l.barcode||"(sin título)", fecha:fechaAR(l.date_due)||""});
-  return { vencidos:venc.map(m), por_vencer:porv.map(m), prestamos:todos.map(m) };
+  const activos = porv.map(m);
+  return { vencidos:venc.map(m), activos, prestamos:todos.map(m), por_vencer:activos };
 }
 function ctxFromLoans(loans){
   const today=new Date().toISOString().slice(0,10);
@@ -930,7 +1013,7 @@ function ctxFromContact(loans){
   const porv=loans.filter(l=>Number(l.dias_atraso)<=0);
   return { vars: ctxVars(venc, porv, loans), books: booksVars(venc, porv, loans) };
 }
-// kind: 'overdue' = socios con algún vencido · 'upcoming' = socios con algún por vencer
+// kind: 'overdue' = socios con algún vencido · 'upcoming' = socios con algún préstamo activo
 async function addByStatus(kind, btn){
   const restore=btnBusy(btn,"Cargando…");
   try {
@@ -1005,7 +1088,8 @@ async function mailSend(){
   }
   // En modo prueba, mandamos UNA sola muestra (el primer destinatario), no una por socio.
   const lista = test_to ? recipients.slice(0,1) : recipients;
-  const payload={ subject, body, dry_run:false, test_to,
+  // Sin dry_run: manda el backend (MAIL_DRY_RUN). En true simula y avisa abajo.
+  const payload={ subject, body, test_to,
     recipients: lista.map(r=>({ email:r.email||null, vars:recipVars(r),
       subject:r.subjectOverride??null, body:r.bodyOverride??null, loans:r.books||null })) };
   const n = lista.filter(r=>r.email).length;
@@ -1015,7 +1099,9 @@ async function mailSend(){
     const res=await api("/api/mail/send",{method:"POST",body:JSON.stringify(payload)});
     const modo = res.test_to ? `PRUEBA (1 muestra) → ${esc(res.test_to)}` : "ENVÍO REAL a socios";
     const fall=res.resultados.filter(x=>x.status==="error"||x.status==="skipped");
-    let html=`<div class="msg" style="background:#e3f5ec;color:#137a52;border:1px solid #bfe6d3"><b>${modo}</b>: ${res.enviados}/${res.total} enviados.</div>`;
+    let html = res.dry_run
+      ? `<div class="msg" style="background:#fff4e0;color:#8a5a00;border:1px solid #f0d5a0"><b>SIMULADO</b>: ${res.simulados}/${res.total} mensajes preparados, <b>no se envió ninguno</b>.<br><span class="meta">Está activo <code>MAIL_DRY_RUN=true</code>. Ponelo en <code>false</code> para enviar de verdad.</span></div>`
+      : `<div class="msg" style="background:#e3f5ec;color:#137a52;border:1px solid #bfe6d3"><b>${modo}</b>: ${res.enviados}/${res.total} enviados.</div>`;
     if(fall.length) html+=`<div class="meta">Omitidos/errores (${fall.length}): `+fall.map(e=>`${esc(e.email)} — ${esc(e.detail||e.status)}`).join("; ")+`</div>`;
     $("mailResult").innerHTML=html;
   } catch(err){ $("mailResult").innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
@@ -1577,8 +1663,8 @@ function renderAuto(){
 function renderAutoForm(r, last){
   const esS = r.tipo==='socios';
   autoExcl = (r.excluidos||[]).slice();
-  const varsInt='<code>{{fecha}}</code> <code>{{lista_vencidos}}</code> <code>{{lista_por_vencer}}</code> <code>{{lista_cuotas}}</code> <code>{{total_vencidos}}</code> <code>{{total_por_vencer}}</code> <code>{{total_deudores_cuota}}</code>';
-  const varsSoc='<code>{{nombre}}</code> <code>{{apellido}}</code> <code>{{vencidos}}</code> <code>{{por_vencer}}</code> <code>{{cantidad_vencidos}}</code> <code>{{meses_debe}}</code> <code>{{meses_impagos}}</code>';
+  const varsInt='<code>{{fecha}}</code> <code>{{lista_vencidos}}</code> <code>{{lista_activos}}</code> <code>{{lista_cuotas}}</code> <code>{{total_vencidos}}</code> <code>{{total_activos}}</code> <code>{{total_deudores_cuota}}</code>';
+  const varsSoc='<code>{{nombre}}</code> <code>{{apellido}}</code> <code>{{vencidos}}</code> <code>{{activos}}</code> <code>{{prestamos}}</code> <code>{{cantidad_vencidos}}</code> <code>{{cantidad_activos}}</code> <code>{{cantidad_prestamos}}</code> <code>{{meses_debe}}</code> <code>{{meses_impagos}}</code>';
   $("autoForm").innerHTML=`<div class="card auto-card">
     <div class="auto-head">
       <div>
@@ -1594,13 +1680,13 @@ function renderAutoForm(r, last){
     ${esS?'':`<label>A qué correo se envía</label><input id="a_to" value="${esc(r.to||'')}" placeholder="bibliotecabayer@gmail.com (vacío = remitente)" />`}
     <div class="frow" style="margin-top:.4rem">
       <div><label>Enviar cada (días)</label><input id="a_cada" type="number" min="1" value="${r.cada_dias}" /></div>
-      <div><label>"En préstamo" = vence dentro de (días)</label><input id="a_antes" type="number" min="0" value="${r.dias_antes}" /></div>
+      <div><label>"Activos" = vencen dentro de (días)</label><input id="a_antes" type="number" min="0" value="${r.dias_antes}" /></div>
       <div><label>Listar vencidos desde (días de atraso)</label><input id="a_umbral" type="number" min="0" value="${r.umbral_atraso||1}" /></div>
     </div>
     <label style="margin-top:.6rem">Qué incluye</label>
     <div class="auto-actions" style="margin:.2rem 0 0">
       <label class="opt"><input type="checkbox" id="a_incv" ${r.incluir_vencidos?'checked':''} /> Vencidos</label>
-      <label class="opt"><input type="checkbox" id="a_incp" ${r.incluir_por_vencer?'checked':''} /> En préstamo</label>
+      <label class="opt"><input type="checkbox" id="a_incp" ${r.incluir_por_vencer?'checked':''} /> Activos</label>
       <label class="opt"><input type="checkbox" id="a_incc" ${r.incluir_cuotas?'checked':''} /> Deuda de cuota</label>
       <label class="opt" style="margin-left:.5rem">desde <input id="a_umbralc" type="number" min="1" value="${r.umbral_cuota||1}" style="width:60px" /> mes(es)</label>
     </div>
@@ -1608,7 +1694,7 @@ function renderAutoForm(r, last){
     <input id="a_subject" value="${esc(r.subject||'')}" />
     <label>Cuerpo</label>
     <textarea id="a_body" rows="7">${esc(r.body||'')}</textarea>
-    <p class="varhint">Variables: ${esS?varsSoc:varsInt}</p>
+    <p class="varhint">Variables: <button class="help-btn" data-help="${esS?'libros':'interno'}" title="¿Qué significa cada etiqueta?">?</button> ${esS?varsSoc:varsInt}</p>
     <label>Pie del mensaje</label>
     <textarea id="a_footer" rows="2">${esc(r.footer||'')}</textarea>
     <div class="auto-actions" style="margin-top:.7rem">
@@ -1644,46 +1730,105 @@ function renderAutoForm(r, last){
   });
   setStatus("ok");
 }
+// ── Historial de envíos ────────────────────────────────────────────────────
+// Se usa igual en la pestaña "Historial de envíos" (todo) y dentro de cada
+// reporte de Automáticos (filtrado por report_id). El detalle de cada envío
+// (destinatarios + mensaje) se pide aparte, recién cuando se despliega.
+const ORIGEN_LBL={auto:'Automático', manual:'Mails'};
+const TRIG_LBL={auto:'Programado', manual:'Manual', prueba:'Prueba'};
+const ST_LBL={sent:'enviado', skipped:'sin email', error:'error', simulado:'simulado'};
+const ST_CLS={sent:'badge green', skipped:'badge gray', error:'badge red', simulado:'badge gray'};
+let enviosOrigen="";
+
+function fechaHora(s){
+  const d=new Date(s);
+  return isNaN(d)?esc(s||""):d.toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',dateStyle:'short',timeStyle:'short'});
+}
+async function loadEnvios(){
+  const el=$("enviosLista"); el.innerHTML=busyLine("Cargando historial…");
+  try {
+    const d=await api("/api/envios?limit=100"+(enviosOrigen?"&origen="+enviosOrigen:""));
+    $("enviosAviso").innerHTML = d.seguimiento_activo ? "" :
+      '<div class="msg" style="background:#fff6e5;color:#8a5a00;border:1px solid #f0d9a8">'+
+      'Falta configurar <code>APP_PUBLIC_URL</code>: sin esa variable no se puede registrar si abrieron los mails. El resto del historial se guarda igual.</div>';
+    renderEnvios(el, d.items||[]);
+  } catch(err){ el.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
 async function loadAutoHistory(rid){
   const el=$("a_history"); if(!el) return;
   el.innerHTML=busyLine("Cargando historial…");
   try {
-    const d=await api("/api/auto/history/"+rid+"?limit=20");
-    const items=d.items||[];
-    if(!items.length){ el.innerHTML='<p class="empty">Todavía no hay envíos registrados para este reporte.</p>'; return; }
-    el.innerHTML=items.map(histRow).join("");
-    el.querySelectorAll(".hist-toggle").forEach(b=>b.onclick=()=>{
-      const box=b.closest(".hist-item").querySelector(".hist-dest");
-      box.classList.toggle("hide");
-      b.textContent = box.classList.contains("hide") ? b.dataset.lbl : "Ocultar destinatarios";
-    });
+    const d=await api("/api/envios?origen=auto&limit=20&report_id="+encodeURIComponent(rid));
+    renderEnvios(el, d.items||[], "Todavía no hay envíos registrados para este reporte.");
   } catch(err){ el.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
 }
-function histRow(h){
-  const dd=new Date(h.ts);
-  const cuando=isNaN(dd)?esc(h.ts):dd.toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',dateStyle:'short',timeStyle:'short'});
-  const trig={auto:'Automático',manual:'Manual',prueba:'Prueba'}[h.trigger]||esc(h.trigger||'');
-  const dests=h.destinatarios||[];
-  const sent=dests.filter(x=>x.status==='sent').length;
-  const skip=dests.filter(x=>x.status==='skipped').length;
-  const err=dests.filter(x=>x.status==='error').length;
+function renderEnvios(el, items, vacio){
+  if(!items.length){ el.innerHTML=`<p class="empty">${vacio||"Todavía no hay envíos registrados."}</p>`; return; }
+  el.innerHTML=items.map(envioRow).join("");
+  el.querySelectorAll(".hist-toggle").forEach(b=>b.onclick=()=>toggleEnvioDetalle(b));
+}
+function envioRow(h){
+  const chips=[`<span class="auto-badge">${ORIGEN_LBL[h.origen]||esc(h.origen||'')}</span>`,
+               `<span class="auto-badge">${TRIG_LBL[h.trigger]||esc(h.trigger||'')}</span>`];
+  if(h.dry_run) chips.push('<span class="auto-badge">simulado</span>');
   let resumen;
-  if(h.ok===false) resumen=`<span style="color:var(--red)">Falló: ${esc(h.error||'error')}</span>`;
-  else resumen=`Enviados: <b>${sent}</b>${skip?` · sin email: ${skip}`:''}${err?` · <span style="color:var(--red)">errores: ${err}</span>`:''}${h.test_to?` · prueba a ${esc(h.test_to)}`:''}`;
-  const lista=dests.map(x=>{
-    const cls=x.status==='sent'?'badge green':(x.status==='error'?'badge red':'badge gray');
-    const st=x.status==='sent'?'enviado':(x.status==='skipped'?'sin email':(x.status==='error'?'error':esc(x.status||'')));
-    const quien=x.nombre?`${esc(x.nombre)}${x.email?` <small style="color:var(--muted)">(${esc(x.email)})</small>`:''}`:esc(x.email||'—');
-    return `<div class="hist-d"><span>${quien}${x.detail&&x.status!=='sent'?` <small style="color:var(--muted)">${esc(x.detail)}</small>`:''}</span><span class="${cls}">${st}</span></div>`;
-  }).join("");
-  const lbl=`Ver destinatarios (${dests.length})`;
-  return `<div class="hist-item">
+  if(h.ok===false){ resumen=`<span style="color:var(--red)">Falló: ${esc(h.error||'error')}</span>`; }
+  else {
+    const p=[`Enviados: <b>${h.enviados||0}</b>`];
+    if(h.sin_email) p.push(`sin email: ${h.sin_email}`);
+    if(h.errores) p.push(`<span style="color:var(--red)">errores: ${h.errores}</span>`);
+    if(h.simulados) p.push(`simulados: ${h.simulados}`);
+    if(h.seguimiento && h.enviados) p.push(`abrieron: <b>${h.aperturas||0}</b>/${h.enviados}`);
+    if(h.test_to) p.push(`prueba a ${esc(h.test_to)}`);
+    resumen=p.join(' · ');
+  }
+  return `<div class="hist-item" data-run="${esc(h.run_id||'')}">
     <div class="hist-top">
-      <span><b>${cuando}</b> <span class="auto-badge">${trig}</span></span>
+      <span style="flex:0 0 auto"><b>${fechaHora(h.ts)}</b></span>
+      ${chips.join('')}
+      <span class="hist-tit">${esc(h.titulo||'')}${h.usuario?` <small style="font-weight:400;color:var(--muted)">· por ${esc(h.usuario)}</small>`:''}</span>
       <span class="meta">${resumen}</span>
-      ${dests.length?`<button class="hist-toggle btn-sec" data-lbl="${lbl}" style="padding:.15rem .55rem;font-size:.76rem">${lbl}</button>`:''}
+      ${h.total?`<button class="hist-toggle btn-sec" style="padding:.15rem .55rem;font-size:.76rem">Ver destinatarios (${h.total})</button>`:''}
     </div>
-    <div class="hist-dest hide">${lista}</div>
+    <div class="hist-dest hide"></div>
+  </div>`;
+}
+async function toggleEnvioDetalle(btn){
+  const item=btn.closest(".hist-item"), box=item.querySelector(".hist-dest");
+  btn.dataset.lbl = btn.dataset.lbl || btn.textContent;
+  if(!box.classList.contains("hide")){ box.classList.add("hide"); btn.textContent=btn.dataset.lbl; return; }
+  box.classList.remove("hide");
+  btn.textContent="Ocultar destinatarios";
+  if(box.dataset.cargado) return;
+  box.innerHTML=busyLine("Cargando destinatarios…");
+  try {
+    const d=await api("/api/envios/"+encodeURIComponent(item.dataset.run));
+    box.innerHTML=(d.destinatarios||[]).map(destRow).join("")||'<p class="empty">Sin destinatarios.</p>';
+    box.querySelectorAll(".msg-toggle").forEach(b=>b.onclick=()=>{
+      const pre=b.closest(".hist-d-wrap").querySelector(".hist-msg");
+      pre.classList.toggle("hide");
+      b.textContent=pre.classList.contains("hide")?"ver mensaje":"ocultar";
+    });
+    box.dataset.cargado="1";
+  } catch(err){ box.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
+}
+function destRow(d){
+  const nom=[d.apellido,d.nombre].filter(Boolean).join(', ');
+  const quien=nom?`${esc(nom)}${d.email?` <small style="color:var(--muted)">(${esc(d.email)})</small>`:''}`:esc(d.email||'—');
+  const carnet=d.carnet?` <small style="color:var(--muted)">N° ${esc(d.carnet)}</small>`:'';
+  const desvio=d.enviado_a?` <small style="color:var(--muted)">→ se envió a ${esc(d.enviado_a)}</small>`:'';
+  let apert='';
+  if(d.opened_at) apert=`<span class="badge green" title="${d.opens||1} vista(s) · última: ${esc(d.last_open||'')}">abrió · ${fechaHora(d.opened_at)}</span>`;
+  else if(d.status==='sent') apert='<span class="badge gray" title="Puede haberlo leído con las imágenes bloqueadas">sin registrar</span>';
+  return `<div class="hist-d-wrap">
+    <div class="hist-d">
+      <span>${quien}${carnet}${desvio}${d.detail&&d.status!=='sent'?` <small style="color:var(--muted)">${esc(d.detail)}</small>`:''}</span>
+      <span style="display:flex;gap:.35rem;align-items:center;flex:0 0 auto">${apert}<span class="${ST_CLS[d.status]||'badge gray'}">${ST_LBL[d.status]||esc(d.status||'—')}</span>
+        <button class="msg-toggle btn-sec" style="padding:.1rem .45rem;font-size:.72rem">ver mensaje</button></span>
+    </div>
+    <pre class="hist-msg hide"><b>${esc(d.subject||'(sin asunto)')}</b>
+
+${esc(d.body||'')}</pre>
   </div>`;
 }
 function setStatus(s){
@@ -1790,12 +1935,24 @@ async function runAuto(real){
   try {
     const d=await api("/api/auto/run/"+autoSel,{method:"POST",body:JSON.stringify({test_to})});
     const rr=d.result||{}; let txt;
-    if(r.tipo==='interno') txt=(test_to?`Prueba enviada a ${esc(test_to)}.`:`Enviado a ${esc(d.sent_to)}.`)+` (${rr.enviados||0} envío/s)`;
-    else { const st=d.stats||{}; txt=test_to?`Prueba (1 muestra) enviada a ${esc(test_to)}.`:`Socios: ${st.socios}, con email: ${st.con_email}. Enviados: ${rr.enviados||0}.`; }
-    res.innerHTML=okMsg(txt);
+    if(rr.dry_run){
+      // MAIL_DRY_RUN=true: se armó el mensaje pero no salió ninguno.
+      res.innerHTML=`<div class="msg" style="background:#fff4e0;color:#8a5a00;border:1px solid #f0d5a0"><b>SIMULADO</b>: ${rr.simulados||0} mensaje/s preparado/s, <b>no se envió ninguno</b>.<br><span class="meta">Está activo <code>MAIL_DRY_RUN=true</code>. Ponelo en <code>false</code> para enviar de verdad.</span></div>`;
+    } else {
+      if(r.tipo==='interno') txt=(test_to?`Prueba enviada a ${esc(test_to)}.`:`Enviado a ${esc(d.sent_to)}.`)+` (${rr.enviados||0} envío/s)`;
+      else { const st=d.stats||{}; txt=test_to?`Prueba (1 muestra) enviada a ${esc(test_to)}.`:`Socios: ${st.socios}, con email: ${st.con_email}. Enviados: ${rr.enviados||0}.`; }
+      res.innerHTML=okMsg(txt);
+    }
   } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
-  finally { restore(); }
+  finally { restore(); loadAutoHistory(autoSel); }   // el envío (haya salido o no) ya quedó en el historial
 }
+
+document.querySelectorAll("#enviosFiltro button").forEach(b=>b.addEventListener("click",()=>{
+  enviosOrigen=b.dataset.origen;
+  document.querySelectorAll("#enviosFiltro button").forEach(x=>x.classList.toggle("active",x===b));
+  loadEnvios();
+}));
+$("enviosRef").addEventListener("click",loadEnvios);
 
 if (token) enterApp();
 </script>

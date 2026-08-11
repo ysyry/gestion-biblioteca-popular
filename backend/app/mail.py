@@ -5,7 +5,7 @@
   sobrescribir su asunto/cuerpo (personalización individual).
 - Los mails se envían en HTML (con plantilla de marca: cabecera, color y pie) y
   también en texto plano como respaldo (multipart/alternative).
-- Variables que son listas (préstamos vencidos/por vencer) se pueden pasar como
+- Variables que son listas (préstamos vencidos/activos) se pueden pasar como
   bloques HTML por destinatario (`html`) para que lleguen como TABLA en vez de
   un listado de texto interminable.
 - Modo `mail_dry_run`: simula sin enviar. `test_to`: manda todo a una dirección.
@@ -83,18 +83,29 @@ def html_table(headers: list[str], rows: list[list]) -> str:
 LIBROS_HEADERS = ["Libro", "Vencimiento"]
 
 
-def libros_table(items: list[dict]) -> str:
-    """Tabla HTML unificada de libros para el socio: columnas 'Libro' y 'Vencimiento' (fecha).
+def libros_table(items: list[dict], con_fecha: bool = True) -> str:
+    """Tabla HTML unificada de libros para el socio: columnas 'Libro' y 'Vencimiento'.
 
     `items`: lista de {"titulo": str, "fecha": str}. Fuente única para que el
     compositor de mails y los envíos automáticos muestren exactamente lo mismo.
+
+    `con_fecha=False` deja solo la columna 'Libro'. Se usa para los VENCIDOS: al
+    socio se le nombra el libro, no la fecha en que se le pasó.
     """
+    if not con_fecha:
+        return html_table(["Libro"], [[i.get("titulo") or "(sin título)"] for i in items])
     return html_table(LIBROS_HEADERS,
                       [[i.get("titulo") or "(sin título)", i.get("fecha") or ""] for i in items])
 
 
-def _wrap_html(inner: str) -> str:
-    """Envuelve el cuerpo en la plantilla de marca (logo + cinta de colores + pie)."""
+def _wrap_html(inner: str, track_url: str | None = None) -> str:
+    """Envuelve el cuerpo en la plantilla de marca (logo + cinta de colores + pie).
+
+    Si viene `track_url`, agrega al final el píxel de 1×1 que registra la apertura
+    (ver `tracking.py` por sus límites: imágenes bloqueadas, precarga de Apple, etc.).
+    """
+    pixel = (f'<img src="{track_url}" width="1" height="1" alt="" '
+             'style="display:block;width:1px;height:1px;border:0;opacity:0">') if track_url else ""
     if settings.app_public_url:
         url = settings.app_public_url.rstrip("/")
         # Logo completo a tamaño natural (948x456 ≈ 2:1), sin deformar.
@@ -118,7 +129,7 @@ def _wrap_html(inner: str) -> str:
   <tr><td style="padding:16px 24px;background:#faf7fc;color:#6b7280;font-size:12px;border-top:2px solid {_YELLOW}">
     <b style="color:{_MAGENTA}">Biblioteca Popular Osvaldo Bayer</b> · Villa La Angostura, Neuquén<br>
     Mensaje del sistema de gestión de la biblioteca.</td></tr>
-</table></td></tr></table></body></html>"""
+</table></td></tr></table>{pixel}</body></html>"""
 
 
 def _smtp_connect():
@@ -142,6 +153,14 @@ def _build_mime(m: dict) -> MIMEMultipart:
     return msg
 
 
+def _res(m: dict, status: str, detail: str = "") -> dict:
+    """Fila de resultado de un envío. `idx` = posición original del destinatario:
+    es lo que permite después cruzar quién recibió qué (por email no alcanza,
+    porque en modo prueba todos los mails van a la misma dirección)."""
+    return {"email": m["to"], "status": status, "detail": detail,
+            "idx": m.get("idx"), "nombre": m.get("nombre", "")}
+
+
 def _send_sync(messages: list[dict]) -> list[dict]:
     """Manda por SMTP. Resiliente: reconecta cada ~90 envíos (Gmail corta sesiones
     largas) y reintenta una vez si la conexión se cae. Nunca lanza: si no puede
@@ -151,7 +170,7 @@ def _send_sync(messages: list[dict]) -> list[dict]:
         server = _smtp_connect()
     except Exception as exc:  # no se pudo conectar/autenticar
         detail = f"No se pudo conectar al servidor de correo: {exc}"
-        return [{"email": m["to"], "status": "error", "detail": detail} for m in messages]
+        return [_res(m, "error", detail) for m in messages]
 
     enviados = 0
     try:
@@ -163,16 +182,16 @@ def _send_sync(messages: list[dict]) -> list[dict]:
                     except Exception: pass
                     server = _smtp_connect()
                 server.sendmail(msg["From"], [to_addr], msg.as_string())
-                results.append({"email": to_addr, "status": "sent", "detail": ""}); enviados += 1
+                results.append(_res(m, "sent")); enviados += 1
             except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, ConnectionError):
                 try:  # reconecta y reintenta una vez
                     server = _smtp_connect()
                     server.sendmail(msg["From"], [to_addr], msg.as_string())
-                    results.append({"email": to_addr, "status": "sent", "detail": ""}); enviados += 1
+                    results.append(_res(m, "sent")); enviados += 1
                 except Exception as exc:
-                    results.append({"email": to_addr, "status": "error", "detail": str(exc)})
+                    results.append(_res(m, "error", str(exc)))
             except Exception as exc:   # un destinatario falla, seguimos con el resto
-                results.append({"email": to_addr, "status": "error", "detail": str(exc)})
+                results.append(_res(m, "error", str(exc)))
     finally:
         try: server.quit()
         except Exception: pass
@@ -191,12 +210,16 @@ def _send_resend(messages: list[dict]) -> list[dict]:
             try:
                 r = client.post("https://api.resend.com/emails", json=payload, headers=headers)
                 if r.status_code in (200, 201):
-                    results.append({"email": m["to"], "status": "sent", "detail": ""})
+                    # Guardamos el id de Resend: sirve para rastrear el envío en su panel.
+                    try:
+                        msg_id = (r.json() or {}).get("id") or ""
+                    except Exception:  # noqa: BLE001
+                        msg_id = ""
+                    results.append({**_res(m, "sent"), "provider_id": msg_id})
                 else:
-                    results.append({"email": m["to"], "status": "error",
-                                    "detail": f"Resend {r.status_code}: {r.text[:160]}"})
+                    results.append(_res(m, "error", f"Resend {r.status_code}: {r.text[:160]}"))
             except Exception as exc:  # noqa: BLE001
-                results.append({"email": m["to"], "status": "error", "detail": str(exc)})
+                results.append(_res(m, "error", str(exc)))
     return results
 
 
@@ -209,7 +232,11 @@ async def send_campaign(
 ) -> dict:
     """Renderiza y envía la campaña. `recipients` = lista de dicts con:
        email, vars (dict), subject (override|None), body (override|None),
-       html (dict opcional var->HTML para listas que llegan como tabla).
+       html (dict opcional var->HTML para listas que llegan como tabla),
+       track_url (opcional: píxel de apertura de ese destinatario).
+
+    Los `resultados` vuelven EN EL ORDEN de `recipients` y con su `idx`, para poder
+    cruzar después quién recibió qué (lo usa el historial).
     """
     # En modo prueba se manda UNA sola muestra (el primer destinatario), no una por socio.
     if test_to:
@@ -220,26 +247,26 @@ async def send_campaign(
     prepared: list[dict] = []
     results: list[dict] = []
 
-    for r in recipients:
+    for i, r in enumerate(recipients):
         to_addr = test_to or r.get("email")
         variables = r.get("vars") or {}
         nombre = variables.get("nombre") or ""
         if not to_addr:
             results.append({"email": r.get("email") or "(sin email)", "status": "skipped",
-                            "detail": "socio sin email", "nombre": nombre})
+                            "detail": "socio sin email", "nombre": nombre, "idx": i})
             continue
         tpl = r.get("body") or body_tpl
         prepared.append({
-            "to": to_addr, "from": from_hdr,
+            "to": to_addr, "from": from_hdr, "idx": i, "nombre": nombre,
             "subject": render(r.get("subject") or subject_tpl, variables),
             "plain": render(tpl, variables),
-            "html": _wrap_html(render_html(tpl, variables, r.get("html"))),
+            "html": _wrap_html(render_html(tpl, variables, r.get("html")), r.get("track_url")),
         })
 
     if dry_run:
         for m in prepared:
-            results.append({"email": m["to"], "status": "simulado",
-                            "detail": "DRY RUN (no se envió)", "subject": m["subject"]})
+            results.append({**_res(m, "simulado", "DRY RUN (no se envió)"),
+                            "subject": m["subject"]})
         enviados = 0
     elif provider == "resend":
         if not settings.resend_api_key:
@@ -253,6 +280,10 @@ async def send_campaign(
         sent_results = await asyncio.to_thread(_send_sync, prepared)
         results.extend(sent_results)
         enviados = sum(1 for x in sent_results if x["status"] == "sent")
+
+    # Devolver en el orden original: los "sin email" se acumulan aparte y si no,
+    # aparecerían todos juntos al principio, descolocados respecto de la lista real.
+    results.sort(key=lambda x: x.get("idx") if isinstance(x.get("idx"), int) else 0)
 
     return {
         "dry_run": dry_run,

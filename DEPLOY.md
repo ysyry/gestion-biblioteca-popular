@@ -111,4 +111,6 @@ una base de datos:
 - El programador corre **dentro del proceso** (Railway no se duerme), chequea 1 vez por
   día a `SCHED_HOUR` y dispara cada job según su "cada X días".
 - Los secrets viven solo en las Variables de Railway, nunca en el repo.
-- Para enviar mails de verdad: poné `MAIL_DRY_RUN=false` (o usá el botón "Enviar ahora").
+- Para enviar mails de verdad: poné `MAIL_DRY_RUN=false`. Con `true` **nada sale**:
+  ni Mails, ni las pruebas de Automáticos, ni el programador. La app avisa en
+  pantalla ("SIMULADO") y lo deja anotado así en el historial de envíos.

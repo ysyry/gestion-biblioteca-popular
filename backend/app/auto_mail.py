@@ -3,8 +3,8 @@
 Hay una LISTA de reportes; cada uno se configura por separado (en tabs en la UI).
 Un reporte tiene:
   - tipo: "interno" (un mail a una dirección) o "socios" (uno por socio).
-  - contenido combinable: vencidos, por vencer, deuda de cuota.
-  - cada_dias: frecuencia. dias_antes: ventana de "por vencer".
+  - contenido combinable: vencidos, activos, deuda de cuota.
+  - cada_dias: frecuencia. dias_antes: ventana de los "activos" (los que aún no vencen).
   - asunto / cuerpo / pie propios. Para "socios": lista de excluidos.
 
 Los jobs corren SIN nadie logueado: usan las credenciales de SERVICIO de Koha.
@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime, timezone
+from datetime import date
 
 from . import cuotas
+from . import historial
 from . import mail
 from . import storage
 from .config import settings
@@ -28,7 +29,7 @@ from .koha.reports import KohaRepository
 logger = logging.getLogger("auto_mail")
 
 CONFIG_KEY = "auto_mail"
-_CONFIG_VER = 1   # versión del esquema; sube 1 por cada migración de datos guardados
+_CONFIG_VER = 2   # versión del esquema; sube 1 por cada migración de datos guardados
 
 
 def _default_reports() -> list[dict]:
@@ -40,8 +41,8 @@ def _default_reports() -> list[dict]:
             "subject": "Resumen de préstamos — Biblioteca Osvaldo Bayer",
             "body": ("Resumen automático al {{fecha}}.\n\n"
                      "VENCIDOS ({{total_vencidos}}):\n{{lista_vencidos}}\n\n"
-                     "EN PRÉSTAMO (vencen en los próximos {{dias_antes}} días) ({{total_por_vencer}}):\n"
-                     "{{lista_por_vencer}}\n\n"
+                     "ACTIVOS (vencen en los próximos {{dias_antes}} días) ({{total_activos}}):\n"
+                     "{{lista_activos}}\n\n"
                      "Socios con préstamos vencidos: {{total_socios_deben}}."),
             "footer": "— Sistema de gestión · Biblioteca Popular Osvaldo Bayer",
         },
@@ -54,7 +55,7 @@ def _default_reports() -> list[dict]:
             "body": ("Hola {{nombre}},\n\n"
                      "Te recordamos tus préstamos en la Biblioteca Popular Osvaldo Bayer.\n\n"
                      "Vencidos ({{cantidad_vencidos}}):\n{{vencidos}}\n\n"
-                     "En préstamo ({{cantidad_por_vencer}}):\n{{por_vencer}}"),
+                     "Activos ({{cantidad_activos}}):\n{{activos}}"),
             "footer": "Te esperamos para renovarlos o devolverlos. ¡Gracias!\nBiblioteca Popular Osvaldo Bayer.",
         },
     ]
@@ -79,8 +80,11 @@ def load_config() -> dict:
     # Migraciones de datos guardados (idempotentes, se corren una sola vez por versión).
     ver = data.get("_ver", 0)
     if ver < _CONFIG_VER:
-        if existing:
-            _migrate_v1(cfg)
+        if existing:                      # cada migración corre una sola vez, en orden
+            if ver < 1:
+                _migrate_v1(cfg)
+            if ver < 2:
+                _migrate_v2(cfg)
         cfg["_ver"] = _CONFIG_VER
         _save(cfg)
     else:
@@ -107,7 +111,7 @@ def _lectura_report(reports: list[dict]) -> dict:
                  "podés venir a cambiar de autor, de género, de tema. Hay mucho y estamos "
                  "para acompañarte. Escribinos al wp y contanos.\n\n"
                  "Nos aparece que tenés estos libros en préstamo, ¿es correcto?\n"
-                 "{{por_vencer}}"),
+                 "{{activos}}"),
         "footer": "",
     }
 
@@ -127,6 +131,30 @@ def _migrate_v1(cfg: dict) -> None:
         r["body"] = b
     if not any((r.get("nombre") or "").strip().lower() == "lectura" for r in cfg["reports"]):
         cfg["reports"].append(_lectura_report(cfg["reports"]))
+
+
+# v2: unifica el vocabulario en "activos". Las variables viejas siguen funcionando
+# (están como alias en las vars), pero las plantillas guardadas se reescriben para
+# que lo que se lee y lo que se escribe digan lo mismo.
+_V2_VARS = {
+    "{{por_vencer}}": "{{activos}}",
+    "{{cantidad_por_vencer}}": "{{cantidad_activos}}",
+    "{{lista_por_vencer}}": "{{lista_activos}}",
+    "{{total_por_vencer}}": "{{total_activos}}",
+}
+_V2_TEXTOS = {
+    "EN PRÉSTAMO (vencen en los próximos": "ACTIVOS (vencen en los próximos",
+    "En préstamo (": "Activos (",
+}
+
+
+def _migrate_v2(cfg: dict) -> None:
+    for r in cfg["reports"]:
+        for campo in ("subject", "body", "footer"):
+            t = r.get(campo) or ""
+            for old, new in {**_V2_TEXTOS, **_V2_VARS}.items():
+                t = t.replace(old, new)
+            r[campo] = t
 
 
 def _save(cfg: dict) -> None:
@@ -178,44 +206,10 @@ def _mark_run(rid: str, when: str) -> None:
 
 
 # ── Historial de envíos ─────────────────────────────────────────────────────
-HISTORY_KEY = "auto_mail_history"
-_HISTORY_MAX = 200   # tope global de ejecuciones guardadas (las más nuevas primero)
-
-
-def add_history(entry: dict) -> None:
-    hist = storage.get(HISTORY_KEY) or []
-    hist.insert(0, entry)
-    storage.set(HISTORY_KEY, hist[:_HISTORY_MAX])
-
-
+# El historial vive en `historial.py`, compartido con los envíos manuales de la
+# pestaña Mails. Acá quedan solo los atajos que usa el resto del módulo.
 def get_history(rep_id: str | None = None, limit: int = 20) -> list[dict]:
-    hist = storage.get(HISTORY_KEY) or []
-    if rep_id:
-        hist = [h for h in hist if h.get("report_id") == rep_id]
-    return hist[:limit]
-
-
-def _record_history(rep: dict, out: dict | None, trigger: str,
-                    test_to: str | None, error: str | None = None) -> None:
-    """Guarda una ejecución en el historial: fecha/hora, disparador y a quién se envió."""
-    entry = {
-        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "report_id": rep.get("id"), "report_name": rep.get("nombre"), "tipo": rep.get("tipo"),
-        "trigger": trigger, "test_to": test_to or None,
-    }
-    if error is not None:
-        entry.update({"ok": False, "error": error, "total": 0, "enviados": 0, "destinatarios": []})
-    else:
-        res = (out or {}).get("result") or {}
-        dests = [{"email": r.get("email"), "status": r.get("status"),
-                  "nombre": r.get("nombre", ""), "detail": r.get("detail", "")}
-                 for r in res.get("resultados", [])]
-        entry.update({"ok": True, "total": res.get("total", len(dests)),
-                      "enviados": res.get("enviados", 0), "destinatarios": dests})
-    try:
-        add_history(entry)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("No se pudo guardar el historial de envío: %s", exc)
+    return historial.listar(origen="auto", report_id=rep_id, limit=limit)
 
 
 # ── Datos (Koha + cuotas, con credenciales de servicio) ─────────────────────
@@ -313,21 +307,28 @@ async def build_interno(rep: dict) -> dict:
     def car(r):
         return r.get("cardnumber") or "—"
 
+    # Ojo: este reporte lo leen las bibliotecarias, no el socio. Acá los vencidos SÍ
+    # llevan fecha y días de atraso: es el dato que necesitan para trabajar.
+    lista_venc = "\n".join(f"• N° {car(r)} — {nom(r)} — {_titulo(r)} (venció {_d(r.get('date_due'))}, {_dias(r)} días)" for r in venc) or "ninguno"
+    lista_act = "\n".join(f"• N° {car(r)} — {nom(r)} — {_titulo(r)} (vence {_d(r.get('date_due'))})" for r in porv) or "ninguno"
     vars = {
         "fecha": date.today().isoformat(),
         "dias_antes": str(dias_antes),
         "total_vencidos": str(len(venc)),
-        "total_por_vencer": str(len(porv)),
+        "total_activos": str(len(porv)),
         "total_socios_deben": str(len({r.get("cardnumber") for r in venc if r.get("cardnumber")})),
-        "lista_vencidos": "\n".join(f"• N° {car(r)} — {nom(r)} — {_titulo(r)} (venció {_d(r.get('date_due'))}, {_dias(r)} días)" for r in venc) or "ninguno",
-        "lista_por_vencer": "\n".join(f"• N° {car(r)} — {nom(r)} — {_titulo(r)} (vence {_d(r.get('date_due'))})" for r in porv) or "ninguno",
+        "lista_vencidos": lista_venc,
+        "lista_activos": lista_act,
+        # Alias del nombre viejo: las plantillas que aún digan "por vencer" siguen andando.
+        "total_por_vencer": str(len(porv)), "lista_por_vencer": lista_act,
         "total_deudores_cuota": "0", "lista_cuotas": "ninguno",
     }
+    tabla_act = mail.html_table(["N° socio", "Socio", "Libro", "Vencimiento"],
+                                [[car(r), nom(r), _titulo(r), _d(r.get("date_due"))] for r in porv])
     html_blocks = {
         "lista_vencidos": mail.html_table(["N° socio", "Socio", "Libro", "Vencimiento", "Atraso"],
                                           [[car(r), nom(r), _titulo(r), _d(r.get("date_due")), f"{_dias(r)} días"] for r in venc]),
-        "lista_por_vencer": mail.html_table(["N° socio", "Socio", "Libro", "Vencimiento"],
-                                            [[car(r), nom(r), _titulo(r), _d(r.get("date_due"))] for r in porv]),
+        "lista_activos": tabla_act, "lista_por_vencer": tabla_act,
     }
     stats = {"vencidos": len(venc), "por_vencer": len(porv)}
 
@@ -359,17 +360,20 @@ async def build_interno(rep: dict) -> dict:
     }
 
 
-async def run_interno(rep: dict, test_to: str | None = None) -> dict:
+async def run_interno(rep: dict, test_to: str | None = None, run_id: str = "",
+                      dry_run: bool = False) -> dict:
     data = await build_interno(rep)
     to = test_to or data["to"]
     if not to:
         raise RuntimeError("No hay dirección destino (configurá 'A qué correo' o SMTP_FROM).")
+    recs = [{"email": to, "vars": data["vars"], "subject": None, "body": None, "html": data["html"]}]
+    seguimiento = historial.aplicar_seguimiento(recs, run_id) if run_id else False
     res = await mail.send_campaign(
-        data["subject_tpl"], data["body_tpl"],
-        [{"email": to, "vars": data["vars"], "subject": None, "body": None, "html": data["html"]}],
-        dry_run=False, test_to=None,
+        data["subject_tpl"], data["body_tpl"], recs, dry_run=dry_run, test_to=None,
     )
-    return {"sent_to": to, "stats": data["stats"], "result": res}
+    return {"sent_to": to, "stats": data["stats"], "result": res,
+            "_hist": {"recipients": recs, "subject_tpl": data["subject_tpl"],
+                      "body_tpl": data["body_tpl"], "seguimiento": seguimiento}}
 
 
 # ── Reporte A SOCIOS (uno por socio) ────────────────────────────────────────
@@ -419,19 +423,31 @@ async def _socios_recipients(rep: dict) -> dict:
         venc = [l for l in g["loans"] if (_dias(l) or 0) >= umbral_atraso and (_dias(l) or 0) > 0]
         porv = [l for l in g["loans"] if _dias(l) is not None and -dias_antes <= _dias(l) <= 0]
         s = cm.get(c, {})
+        todos = g["loans"]      # todo lo que tiene prestado: vencidos + activos
+        # A los VENCIDOS no se les pone fecha: al socio se le nombra el libro, no cuándo se le pasó.
+        lista_venc = "\n".join(f"• {_titulo(l)}" for l in venc) or "ninguno"
+        lista_act = "\n".join(f"• {_titulo(l)} (vence {_d(l.get('date_due'))})" for l in porv) or "ninguno"
+        lista_todos = "\n".join(f"• {_titulo(l)} (vence {_d(l.get('date_due'))})" for l in todos) or "ninguno"
+        tabla_act = mail.libros_table([{"titulo": _titulo(l), "fecha": _d(l.get("date_due"))} for l in porv])
         recipients.append({
             "email": email,
             "vars": {
                 "nombre": nombre, "apellido": apellido, "carnet": carnet,
-                "vencidos": "\n".join(f"• {_titulo(l)} (venció {_d(l.get('date_due'))})" for l in venc) or "ninguno",
-                "por_vencer": "\n".join(f"• {_titulo(l)} (vence {_d(l.get('date_due'))})" for l in porv) or "ninguno",
-                "cantidad_vencidos": str(len(venc)), "cantidad_por_vencer": str(len(porv)),
+                "vencidos": lista_venc,
+                "activos": lista_act,
+                "prestamos": lista_todos,
+                "cantidad_vencidos": str(len(venc)),
+                "cantidad_activos": str(len(porv)),
+                "cantidad_prestamos": str(len(todos)),
+                # Alias del nombre viejo: las plantillas que aún digan {{por_vencer}} siguen andando.
+                "por_vencer": lista_act, "cantidad_por_vencer": str(len(porv)),
                 "meses_debe": str(s.get("debe", 0)),
                 "meses_impagos": ", ".join(s.get("impagos", [])) or "—",
             },
             "html": {
-                "vencidos": mail.libros_table([{"titulo": _titulo(l), "fecha": _d(l.get("date_due"))} for l in venc]),
-                "por_vencer": mail.libros_table([{"titulo": _titulo(l), "fecha": _d(l.get("date_due"))} for l in porv]),
+                "vencidos": mail.libros_table([{"titulo": _titulo(l)} for l in venc], con_fecha=False),
+                "activos": tabla_act, "por_vencer": tabla_act,
+                "prestamos": mail.libros_table([{"titulo": _titulo(l), "fecha": _d(l.get("date_due"))} for l in todos]),
             },
             "subject": None, "body": None,
             "_carnet": carnet, "_vencidos": len(venc), "_porvencer": len(porv), "_debe": s.get("debe", 0),
@@ -460,19 +476,24 @@ async def build_socios(rep: dict) -> dict:
             "sample": sample, "destinatarios": destinatarios}
 
 
-async def run_socios(rep: dict, test_to: str | None = None) -> dict:
+async def run_socios(rep: dict, test_to: str | None = None, run_id: str = "",
+                     dry_run: bool = False) -> dict:
     data = await _socios_recipients(rep)
     recs = data["recipients"]
     if test_to:
         recs = recs[:1]   # prueba: una sola muestra
-    res = await mail.send_campaign(rep["subject"], _body_tpl(rep), recs, dry_run=False, test_to=test_to)
+    body_tpl = _body_tpl(rep)
+    seguimiento = historial.aplicar_seguimiento(recs, run_id) if run_id else False
+    res = await mail.send_campaign(rep["subject"], body_tpl, recs, dry_run=dry_run, test_to=test_to)
     # Completa el nombre en cada resultado (para el historial "a quién se envió").
-    name_by = {(r.get("email") or ""): (r.get("vars") or {}).get("nombre", "") for r in recs}
     for x in res.get("resultados", []):
-        if not x.get("nombre"):
-            x["nombre"] = name_by.get(x.get("email") or "", "")
+        i = x.get("idx")
+        if not x.get("nombre") and isinstance(i, int) and 0 <= i < len(recs):
+            x["nombre"] = (recs[i].get("vars") or {}).get("nombre", "")
     return {"stats": {"socios": len(data["recipients"]), "con_email": data["con_email"],
-                      "sin_email": data["sin_email"], "prueba": bool(test_to)}, "result": res}
+                      "sin_email": data["sin_email"], "prueba": bool(test_to)}, "result": res,
+            "_hist": {"recipients": recs, "subject_tpl": rep["subject"],
+                      "body_tpl": body_tpl, "seguimiento": seguimiento}}
 
 
 # ── Dispatch ────────────────────────────────────────────────────────────────
@@ -480,14 +501,31 @@ async def preview_report(rep: dict) -> dict:
     return await (build_interno(rep) if rep["tipo"] == "interno" else build_socios(rep))
 
 
-async def run_report(rep: dict, test_to: str | None = None, trigger: str = "manual") -> dict:
+async def run_report(rep: dict, test_to: str | None = None, trigger: str = "manual",
+                     usuario: str = "", dry_run: bool | None = None) -> dict:
+    """Ejecuta el reporte y deja constancia en el historial (también si falla).
+
+    `dry_run=None` toma el valor de MAIL_DRY_RUN, igual que la pestaña Mails:
+    en true simula el envío y no manda nada de verdad.
+    """
+    run_id = historial.new_run_id()
     trig = "prueba" if test_to else trigger
+    dry = settings.mail_dry_run if dry_run is None else bool(dry_run)
+    comun = {"run_id": run_id, "origen": "auto", "titulo": rep.get("nombre") or "",
+             "report_id": rep.get("id"), "tipo": rep.get("tipo"), "trigger": trig,
+             "usuario": usuario, "test_to": test_to, "dry_run": dry}
     try:
-        out = await (run_interno(rep, test_to) if rep["tipo"] == "interno" else run_socios(rep, test_to))
+        out = await (run_interno(rep, test_to, run_id, dry) if rep["tipo"] == "interno"
+                     else run_socios(rep, test_to, run_id, dry))
     except Exception as exc:
-        _record_history(rep, None, trig, test_to, error=str(exc))
+        historial.record(**comun, subject_tpl=rep.get("subject", ""), body_tpl=rep.get("body", ""),
+                         dests=[], ok=False, error=str(exc))
         raise
-    _record_history(rep, out, trig, test_to)
+    h = out.pop("_hist")
+    historial.record(**comun, subject_tpl=h["subject_tpl"], body_tpl=h["body_tpl"],
+                     dests=historial.destinatarios(h["recipients"], out["result"].get("resultados", [])),
+                     seguimiento=h["seguimiento"])
+    out["run_id"] = run_id
     return out
 
 

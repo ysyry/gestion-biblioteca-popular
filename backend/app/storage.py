@@ -65,3 +65,14 @@ def set(key: str, value) -> None:
             conn.commit()
         return
     _file(key).write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def delete(key: str) -> None:
+    """Borra una clave. No falla si no existe (se usa para podar historial viejo)."""
+    if DATABASE_URL:
+        with _conn() as conn:
+            _ensure(conn)
+            conn.execute("DELETE FROM app_kv WHERE key = %s", (key,))
+            conn.commit()
+        return
+    _file(key).unlink(missing_ok=True)
