@@ -90,6 +90,38 @@ async def loans_contact(fresh: bool = Query(False), repo: KohaRepository = Depen
 
 
 # ── Estadísticas ────────────────────────────────────────────────────────────
+def _consultor(repo: KohaRepository, panel: str):
+    """Arma la función de consulta de un panel y la lista donde anota los fallos.
+
+    Antes cada panel se tragaba los errores y devolvía [], que aguas abajo se
+    convertía en 0. Resultado: un tablero lleno de ceros que parecía un dato real
+    ("la biblioteca tiene 0 socios") cuando en verdad Koha no había contestado.
+    Ahora el fallo se anota y el panel decide: si lo que falló son los números
+    principales, corta con error; si es un gráfico suelto, avisa y sigue.
+    """
+    fallos: list[str] = []
+
+    async def q(sql):
+        try:
+            return await repo.run_sql(sql)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("stats/%s: consulta falló: %s", panel, exc)
+            fallos.append(str(exc))
+            return None          # None = no se pudo leer (distinto de "no hay datos")
+
+    return q, fallos
+
+
+def _exigir(*resultados) -> None:
+    """Corta con 502 si alguna consulta principal no se pudo leer."""
+    if any(r is None for r in resultados):
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudieron leer los datos de Koha. Probá de nuevo en un momento; "
+                   "si sigue igual, avisá que Koha no está respondiendo.",
+        )
+
+
 def _dias_int(r) -> int | None:
     try:
         return int(r.get("dias_atraso"))
@@ -186,14 +218,11 @@ async def stats_catalog(fresh: bool = Query(False), repo: KohaRepository = Depen
 
 
 async def _stats_catalog(repo: KohaRepository):
-    async def q(sql):
-        try:
-            return await repo.run_sql(sql)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("stats/catalog: consulta falló: %s", exc)
-            return []
+    q, fallos = _consultor(repo, "catalog")
 
     totals, tipos, top = await asyncio.gather(q(_SQL_TOTALES), q(_SQL_TIPOS), q(_SQL_TOP_HIST))
+    _exigir(totals)                       # sin los totales el panel no dice nada cierto
+    tipos, top = tipos or [], top or []
     t = totals[0] if totals else {}
     ejemplares, titulos = _num(t.get("ejemplares")), _num(t.get("titulos"))
     sin_circular = _num(t.get("sin_circular"))
@@ -211,6 +240,7 @@ async def _stats_catalog(repo: KohaRepository):
         "retirados": _num(t.get("retirados")),
         "por_tipo": serie(tipos),
         "top_historico": serie(top),
+        "avisos": fallos,
     }
 
 
@@ -241,12 +271,7 @@ async def _stats_historico(repo: KohaRepository, d1, d2):
     # Fechas re-serializadas desde objetos date -> seguras para interpolar.
     rango = f"s.datetime >= '{d1.isoformat()} 00:00:00' AND s.datetime <= '{d2.isoformat()} 23:59:59'"
 
-    async def q(sql):
-        try:
-            return await repo.run_sql(sql)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("stats/historico: consulta falló: %s", exc)
-            return []
+    q, fallos = _consultor(repo, "historico")
 
     totales, por_mes, top_titulos, top_socios = await asyncio.gather(
         q(f"""
@@ -271,10 +296,12 @@ async def _stats_historico(repo: KohaRepository, d1, d2):
         GROUP BY br.borrowernumber ORDER BY count DESC LIMIT 10"""),
     )
 
+    _exigir(totales)                      # sin totales, los números serían inventados
     t = totales[0] if totales else {}
 
     def serie(rows):
-        return [{"label": r.get("label") or "—", "count": _num(r.get("count"))} for r in rows]
+        return [{"label": r.get("label") or "—", "count": _num(r.get("count"))}
+                for r in (rows or [])]
 
     return {
         "desde": d1.isoformat(), "hasta": d2.isoformat(),
@@ -285,6 +312,7 @@ async def _stats_historico(repo: KohaRepository, d1, d2):
         "por_mes": serie(por_mes),
         "top_titulos": serie(top_titulos),
         "top_socios": serie(top_socios),
+        "avisos": fallos,
     }
 
 
@@ -297,15 +325,11 @@ async def stats_estrategia(fresh: bool = Query(False), repo: KohaRepository = De
 
 
 async def _stats_estrategia(repo: KohaRepository):
-    async def q(sql):
-        try:
-            return await repo.run_sql(sql)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("stats/estrategia: consulta falló: %s", exc)
-            return []
+    q, fallos = _consultor(repo, "estrategia")
 
     def serie(rows):
-        return [{"label": str(r.get("label") or "—"), "count": _num(r.get("count"))} for r in rows]
+        return [{"label": str(r.get("label") or "—"), "count": _num(r.get("count"))}
+                for r in (rows or [])]
 
     (prestamos_anio, socios_activos_anio, socios_nuevos_anio, estacionalidad,
      acervo_anio, socios_kpi, acervo_kpi) = await asyncio.gather(
@@ -334,6 +358,7 @@ async def _stats_estrategia(repo: KohaRepository):
         FROM items"""),
     )
 
+    _exigir(socios_kpi, acervo_kpi)       # mostrar 0 socios sería mentir
     sk = socios_kpi[0] if socios_kpi else {}
     ak = acervo_kpi[0] if acervo_kpi else {}
     total, activos12, nunca = _num(sk.get("total")), _num(sk.get("activos12")), _num(sk.get("nunca"))
@@ -349,6 +374,9 @@ async def _stats_estrategia(repo: KohaRepository):
                    "dormidos": max(total - activos12 - nunca, 0), "nunca": nunca},
         "acervo": {"nuevos_12m": _num(ak.get("nuevos12")), "ult_5": ult5,
                    "mas_5": max(total_items - ult5, 0)},
+        # Consultas sueltas que fallaron: el panel se muestra igual, pero avisando
+        # cuál gráfico quedó incompleto en vez de dibujarlo vacío como si fuera cero.
+        "avisos": fallos,
     }
 
 

@@ -50,6 +50,11 @@ class KohaClient:
         )
         self._logged_in = False
         self._lock = asyncio.Lock()
+        # Número de sesión. Sube en cada login. Sirve para que, si muchos pedidos
+        # en paralelo se encuentran con la sesión vencida, se renueve UNA sola vez
+        # y los demás reintenten con la cookie nueva (antes cada uno volvía a
+        # loguear y se pisaban entre sí, devolviendo páginas HTML en vez de datos).
+        self._gen = 0
         self._sql_cache: dict[int, str] = {}  # report_id -> SQL guardado (se busca una vez)
 
     async def aclose(self) -> None:
@@ -68,6 +73,7 @@ class KohaClient:
             self._logged_in = False
             raise KohaAuthError("Login rechazado por Koha (revisar usuario/contraseña/permisos).")
         self._logged_in = True
+        self._gen += 1
         logger.info("Sesión Koha iniciada como %s", self._userid)
 
     async def _ensure_login(self) -> None:
@@ -75,14 +81,59 @@ class KohaClient:
             if not self._logged_in:
                 await self.login()
 
+    async def _renovar(self, gen: int) -> bool:
+        """Renueva la sesión, pero solo si nadie más la renovó ya.
+
+        `gen` es el número de sesión que tenía quien detectó el vencimiento. Si al
+        tomar el lock la sesión ya es otra, alguien la renovó mientras esperábamos:
+        no volvemos a loguear, solo avisamos que conviene reintentar.
+        """
+        async with self._lock:
+            if gen != self._gen:
+                return True          # ya la renovó otro: reintentá y listo
+            await self.login()
+            return True
+
+    @staticmethod
+    def _es_html(text: str) -> bool:
+        """¿Koha devolvió una página web en vez del export de datos?
+
+        El export es texto plano (TSV). Si empieza con HTML, algo salió mal:
+        sesión vencida, sin permisos, o un error del servidor.
+        """
+        inicio = text.lstrip()[:200].lower()
+        return inicio.startswith("<!doctype") or inicio.startswith("<html") or "<html" in inicio
+
+    @classmethod
+    def _exigir_datos(cls, text: str, contexto: str) -> None:
+        """Corta con un error claro si la respuesta no son datos.
+
+        Antes esto no se validaba: una página HTML se parseaba como si fuera TSV y
+        salían filas basura que terminaban mostrándose como CEROS en los tableros.
+        Un cero inventado es peor que un error, así que ahora falla a la vista.
+        """
+        if not cls._es_html(text):
+            return
+        soup = BeautifulSoup(text, "html.parser")
+        alerta = soup.find(class_="dialog alert") or soup.find(class_="dialog message")
+        if alerta:
+            raise KohaError(f"{contexto}: {alerta.get_text(' ', strip=True)}")
+        if LOGIN_MARKER in text or soup.find("input", attrs={"name": "koha_login_context"}):
+            raise KohaAuthError(f"{contexto}: Koha pidió iniciar sesión de nuevo.")
+        titulo = soup.find("title")
+        detalle = titulo.get_text(strip=True) if titulo else "respuesta inesperada"
+        raise KohaError(f"{contexto}: Koha devolvió una página web en vez de datos ({detalle}).")
+
     async def _get_report_sql(self, report_id: int) -> str:
         """Devuelve el SQL guardado del informe (se busca una sola vez y se cachea)."""
         if report_id in self._sql_cache:
             return self._sql_cache[report_id]
-        resp = await self._client.get(RUN_PATH, params={"reports": report_id, "phase": "Edit SQL"})
+        params = {"reports": report_id, "phase": "Edit SQL"}
+        gen = self._gen
+        resp = await self._client.get(RUN_PATH, params=params)
         if LOGIN_MARKER in resp.text:
-            await self.login()
-            resp = await self._client.get(RUN_PATH, params={"reports": report_id, "phase": "Edit SQL"})
+            await self._renovar(gen)
+            resp = await self._client.get(RUN_PATH, params=params)
         soup = BeautifulSoup(resp.text, "html.parser")
         ta = soup.find("textarea", attrs={"name": "sql"})
         if ta is None:
@@ -123,20 +174,13 @@ class KohaClient:
         final_sql = self._substitute(sql, params or [])
 
         data = {"sql": final_sql, "format": "tab", "phase": "Export", "submit": "Bajar"}
+        gen = self._gen
         resp = await self._client.post(RUN_PATH, data=data)
-        if LOGIN_MARKER in resp.text:
-            async with self._lock:
-                await self.login()
+        if self._es_html(resp.text):
+            await self._renovar(gen)
             resp = await self._client.post(RUN_PATH, data=data)
 
-        # Si Koha devolvió HTML de error en vez del TSV, avisamos.
-        head = resp.text[:4000]
-        if "\t" not in head and "dialog alert" in head:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            alert = soup.find(class_="dialog alert")
-            detail = alert.get_text(" ", strip=True) if alert else "error desconocido"
-            raise KohaError(f"Informe {report_id}: {detail}")
-
+        self._exigir_datos(resp.text, f"Informe {report_id}")
         return self._parse_tsv(resp.text)
 
     async def run_sql(self, sql: str) -> list[dict]:
@@ -144,17 +188,13 @@ class KohaClient:
         contra el export de Koha y devuelve las filas. Para estadísticas de catálogo."""
         await self._ensure_login()
         data = {"sql": sql, "format": "tab", "phase": "Export", "submit": "Bajar"}
+        gen = self._gen
         resp = await self._client.post(RUN_PATH, data=data)
-        if LOGIN_MARKER in resp.text:
-            async with self._lock:
-                await self.login()
+        if self._es_html(resp.text):
+            await self._renovar(gen)
             resp = await self._client.post(RUN_PATH, data=data)
-        head = resp.text[:4000]
-        if "\t" not in head and "dialog alert" in head:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            alert = soup.find(class_="dialog alert")
-            detail = alert.get_text(" ", strip=True) if alert else "error desconocido"
-            raise KohaError(f"Consulta de catálogo: {detail}")
+
+        self._exigir_datos(resp.text, "Consulta de catálogo")
         return self._parse_tsv(resp.text)
 
     @staticmethod

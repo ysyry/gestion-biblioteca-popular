@@ -1140,6 +1140,18 @@ function hbarOpts(rows, color){
     plotOptions:{ bar:{ horizontal:true, borderRadius:5, barHeight:'62%', distributed:false } },
     grid:{ show:false }, legend:{show:false}, tooltip:{ y:{ formatter:v=>miles(v) } } };
 }
+// Si el backend avisa que alguna consulta a Koha falló, se dice en pantalla.
+// Antes ese gráfico salía vacío y parecía un dato ("no hubo préstamos"), cuando
+// en realidad no se pudo leer.
+function avisoParcial(avisos){
+  if(!avisos || !avisos.length) return "";
+  return `<div class="msg" style="background:#fff4e0;color:#8a5a00;border:1px solid #f0d5a0;margin-bottom:1rem">
+    <b>Ojo:</b> ${avisos.length===1?"un gráfico de este panel no se pudo leer":
+    `${avisos.length} gráficos de este panel no se pudieron leer`} desde Koha,
+    así que ${avisos.length===1?"queda":"quedan"} vacío${avisos.length===1?"":"s"}.
+    El resto de los números sí son correctos. Probá con “Actualizar”.</div>`;
+}
+
 async function loadStats(fresh){
   const el=$("statsContent"); el.innerHTML=LOADER; destroyCharts();
   const fq = fresh ? "?fresh=1" : "";
@@ -1224,6 +1236,7 @@ async function loadEstrategia(fresh){
     const s=d.socios, a=d.acervo;
     const pctAct = s.total ? Math.round(100*s.activos_12m/s.total) : 0;
     el.innerHTML=`
+      ${avisoParcial(d.avisos)}
       <h2 class="stats-h"><button class="btn-refresh" onclick="loadEstrategia(true)">↻ Actualizar</button>Crecimiento de la biblioteca</h2>
       <p class="meta" style="margin:.1rem 0 1rem">Préstamos por año (área) y socios activos (línea). Pasá el mouse para ver los valores de cada año.</p>
       <div class="card stats-full"><div id="chGrowth"></div></div>
