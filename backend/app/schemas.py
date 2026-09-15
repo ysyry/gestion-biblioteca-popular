@@ -10,9 +10,21 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
+    """Lo que devuelve el login: el token y el perfil de quien entró.
+
+    El frontend arma el menú con `secciones` y decide qué mostrar con `permisos`,
+    así nadie ve una pestaña que después le daría 403.
+    """
     access_token: str
     token_type: str = "bearer"
     username: str
+    nombre: str = ""
+    rol: str = ""
+    rol_etiqueta: str = ""
+    subcomision: str = ""
+    permisos: list[str] = []
+    secciones: list[dict] = []
+    menu: list[dict] = []
 
 
 class MailRecipient(BaseModel):

@@ -9,11 +9,14 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from ..auth import (
+    Sesion,
     authenticate,
     get_current_username,
     get_repository,
+    get_session,
     logout,
     oauth2_scheme,
+    requiere,
     _decode,
 )
 from .. import mail
@@ -24,6 +27,10 @@ from .. import agenda
 from .. import cuotas
 from .. import pagos
 from .. import cache
+from .. import espacios
+from .. import permisos
+from .. import solicitudes
+from .. import usuarios
 from ..config import settings
 
 # TTL (segundos) por tipo de dato. Lo que cambia rápido, caché corto.
@@ -63,8 +70,101 @@ async def do_logout(token: str = Depends(oauth2_scheme)):
 
 
 @router.get("/me", tags=["auth"])
-async def me(username: str = Depends(get_current_username)):
-    return {"username": username}
+async def me(s: Sesion = Depends(get_session)):
+    """Quién está adentro y qué puede ver. El frontend arma el menú con esto."""
+    return {
+        "username": s.usuario,
+        "nombre": s.nombre,
+        "rol": s.rol,
+        "rol_etiqueta": permisos.ETIQUETAS.get(s.rol, s.rol),
+        "subcomision": s.subcomision,
+        "es_de_koha": s.es_de_koha,
+        "permisos": sorted(s.permisos),
+        "secciones": permisos.secciones_de(s.rol),
+        "menu": permisos.menu_de(s.rol),
+    }
+
+
+# ── Usuarios de la app (comisión directiva y subcomisiones) ──────────────────
+@router.get("/usuarios", tags=["usuarios"])
+async def usuarios_listar(s: Sesion = Depends(requiere(permisos.USUARIOS_ADMIN))):
+    """Usuarios propios de la app. Las bibliotecarias no están acá: entran con Koha."""
+    return {
+        "items": usuarios.listar(),
+        "roles": [{"id": r, "titulo": permisos.ETIQUETAS.get(r, r)} for r in permisos.ROLES],
+        "subcomisiones": usuarios.subcomisiones(),
+    }
+
+
+@router.post("/usuarios", tags=["usuarios"])
+async def usuarios_crear(body: dict = Body(...),
+                         s: Sesion = Depends(requiere(permisos.USUARIOS_ADMIN))):
+    """Crea un usuario. Devuelve la contraseña en claro UNA sola vez, para dictarla."""
+    b = body or {}
+    try:
+        u, clave = usuarios.crear(
+            usuario=b.get("usuario", ""),
+            nombre=b.get("nombre", ""),
+            rol=b.get("rol", ""),
+            password=(b.get("password") or "").strip() or None,
+            email=b.get("email", ""),
+            subcomision=b.get("subcomision", ""),
+            creado_por=s.usuario,
+        )
+    except usuarios.ErrorUsuario as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"usuario": u, "password": clave}
+
+
+@router.put("/usuarios/{uid}", tags=["usuarios"])
+async def usuarios_actualizar(uid: str, body: dict = Body(...),
+                              s: Sesion = Depends(requiere(permisos.USUARIOS_ADMIN))):
+    """Edita nombre, email, rol, subcomisión o si está activo."""
+    if uid == s.uid and body.get("activo") is False:
+        raise HTTPException(status_code=400, detail="No podés desactivarte a vos misma/o.")
+    try:
+        return usuarios.actualizar(uid, body or {}, editado_por=s.usuario)
+    except usuarios.ErrorUsuario as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/usuarios/{uid}/password", tags=["usuarios"])
+async def usuarios_resetear(uid: str, body: dict = Body(default={}),
+                            s: Sesion = Depends(requiere(permisos.USUARIOS_ADMIN))):
+    """Resetea la contraseña. Devuelve la nueva en claro, una sola vez."""
+    try:
+        clave = usuarios.resetear_password(
+            uid, nueva=(body or {}).get("password") or None, editado_por=s.usuario)
+    except usuarios.ErrorUsuario as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"password": clave}
+
+
+@router.delete("/usuarios/{uid}", tags=["usuarios"])
+async def usuarios_borrar(uid: str, s: Sesion = Depends(requiere(permisos.USUARIOS_ADMIN))):
+    """Baja definitiva. En general conviene desactivar en vez de borrar."""
+    if uid == s.uid:
+        raise HTTPException(status_code=400, detail="No podés borrarte a vos misma/o.")
+    try:
+        usuarios.borrar(uid, editado_por=s.usuario)
+    except usuarios.ErrorUsuario as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@router.post("/password", tags=["usuarios"])
+async def password_propia(body: dict = Body(...), s: Sesion = Depends(get_session)):
+    """Cambio de contraseña de la propia persona (solo usuarios de la app)."""
+    if not s.uid:
+        raise HTTPException(
+            status_code=400,
+            detail="Tu contraseña es la de Koha: se cambia desde Koha, no desde acá.")
+    try:
+        usuarios.cambiar_password(s.uid, (body or {}).get("actual", ""),
+                                  (body or {}).get("nueva", ""))
+    except usuarios.ErrorUsuario as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 # ── Préstamos ────────────────────────────────────────────────────────────────
@@ -421,7 +521,7 @@ async def member_profile(cardnumber: str, repo: KohaRepository = Depends(get_rep
 
 # ── Mails ─────────────────────────────────────────────────────────────────────
 @router.get("/mail/config", tags=["mail"])
-async def mail_config(_: str = Depends(get_current_username)):
+async def mail_config(_: Sesion = Depends(requiere(permisos.MAILS))):
     """Estado de la configuración de mail (sin exponer credenciales)."""
     return {
         "configured": bool(settings.smtp_host),
@@ -432,7 +532,7 @@ async def mail_config(_: str = Depends(get_current_username)):
 
 
 @router.post("/mail/send", tags=["mail"])
-async def mail_send(body: MailSendRequest, usuario: str = Depends(get_current_username)):
+async def mail_send(body: MailSendRequest, ses: Sesion = Depends(requiere(permisos.MAILS))):
     """Envía (o simula) una campaña de mail a los destinatarios seleccionados.
 
     Variables de combinación en asunto/cuerpo: {{nombre}}, {{apellido}}, {{carnet}},
@@ -478,7 +578,7 @@ async def mail_send(body: MailSendRequest, usuario: str = Depends(get_current_us
     seguimiento = historial.aplicar_seguimiento(recipients, run_id)
     comun = {"run_id": run_id, "origen": "manual", "titulo": body.subject or "(sin asunto)",
              "tipo": "socios", "trigger": "prueba" if body.test_to else "manual",
-             "usuario": usuario, "test_to": body.test_to, "dry_run": dry_run,
+             "usuario": ses.usuario, "test_to": body.test_to, "dry_run": dry_run,
              "subject_tpl": body.subject, "body_tpl": body.body}
     try:
         res = await mail.send_campaign(
@@ -506,26 +606,194 @@ async def agenda_events(
     desde: str | None = Query(None, description="YYYY-MM-DD (por defecto hoy)"),
     dias: int = Query(90, ge=1, le=400),
     fresh: bool = Query(False),
-    _: str = Depends(get_current_username),
+    _: Sesion = Depends(requiere(permisos.CALENDARIO_VER)),
 ):
-    """Eventos del calendario de la biblioteca, desde 'desde' por 'dias' días."""
+    """Calendario unificado: los Google Calendar de la biblioteca + las reservas de
+    espacio ya aprobadas en la app, mezcladas y ordenadas por fecha.
+
+    Las reservas salen de la base propia, así que se ven al instante y no dependen
+    de que Google conteste; si Google falla, el calendario igual muestra las reservas.
+    """
     import datetime as _dt
-    if not agenda.configured():
-        return {"configured": False, "events": []}
     try:
         d1 = _dt.date.fromisoformat(desde) if desde else _dt.date.today()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Fecha inválida (YYYY-MM-DD).") from exc
     d2 = d1 + _dt.timedelta(days=dias)
-    key = f"agenda:{d1.isoformat()}:{d2.isoformat()}"
-    if fresh:
-        cache.invalidate(key)
+
+    reservas = solicitudes.eventos(d1, d2)
+
+    evs, aviso = [], None
+    if agenda.configured():
+        key = f"agenda:{d1.isoformat()}:{d2.isoformat()}"
+        if fresh:
+            cache.invalidate(key)
+        try:
+            evs = await cache.cached(key, TTL_AGENDA, lambda: agenda.events(d1, d2), swr=not fresh)
+        except Exception as exc:  # noqa: BLE001
+            # Que Google falle no puede dejar sin calendario a la biblioteca.
+            logger.warning("agenda: no se pudo leer Google Calendar: %s", exc)
+            aviso = f"No se pudieron leer los calendarios de Google ({exc}). "\
+                    "Las reservas de la app sí se están mostrando."
+
+    todos = sorted([*evs, *reservas], key=lambda e: e.get("inicio") or "")
+    calendarios = agenda.calendars() if agenda.configured() else []
+    if reservas or espacios.listar():
+        calendarios = [*calendarios,
+                       {"nombre": "Reservas de espacio", "color": solicitudes.COLOR_RESERVA}]
+    return {"configured": bool(agenda.configured() or reservas),
+            "desde": d1.isoformat(), "hasta": d2.isoformat(),
+            "calendarios": calendarios, "events": todos, "aviso": aviso}
+
+
+# ── Espacios que se pueden reservar ───────────────────────────────────────────
+@router.get("/espacios", tags=["espacios"])
+async def espacios_listar(todos: bool = Query(False),
+                          s: Sesion = Depends(requiere(permisos.CALENDARIO_VER))):
+    """Lista de espacios. `todos=1` incluye los dados de baja (solo para editar)."""
+    incluir = todos and s.puede(permisos.CALENDARIO_EDITAR)
+    return {"items": espacios.listar(incluir_inactivos=incluir),
+            "puede_editar": s.puede(permisos.CALENDARIO_EDITAR)}
+
+
+@router.post("/espacios", tags=["espacios"])
+async def espacios_crear(body: dict = Body(...),
+                         _: Sesion = Depends(requiere(permisos.CALENDARIO_EDITAR))):
+    b = body or {}
     try:
-        evs = await cache.cached(key, TTL_AGENDA, lambda: agenda.events(d1, d2), swr=not fresh)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"No se pudo leer el calendario: {exc}") from exc
-    return {"configured": True, "desde": d1.isoformat(), "hasta": d2.isoformat(),
-            "calendarios": agenda.calendars(), "events": evs}
+        return espacios.crear(b.get("nombre", ""), b.get("capacidad", 0), b.get("notas", ""))
+    except espacios.ErrorEspacio as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/espacios/{eid}", tags=["espacios"])
+async def espacios_actualizar(eid: str, body: dict = Body(...),
+                              _: Sesion = Depends(requiere(permisos.CALENDARIO_EDITAR))):
+    try:
+        return espacios.actualizar(eid, body or {})
+    except espacios.ErrorEspacio as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/espacios/{eid}", tags=["espacios"])
+async def espacios_borrar(eid: str, _: Sesion = Depends(requiere(permisos.CALENDARIO_EDITAR))):
+    """Baja definitiva. Si tiene reservas hechas, conviene desactivarlo en vez de borrar."""
+    try:
+        espacios.borrar(eid)
+    except espacios.ErrorEspacio as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+# ── Solicitudes de espacio ────────────────────────────────────────────────────
+def _mia(s: Sesion, sol: dict) -> bool:
+    """¿Esta solicitud es de quien la está mirando (o de su subcomisión)?"""
+    quien = sol.get("solicitante") or {}
+    if s.uid and quien.get("uid") == s.uid:
+        return True
+    return bool(s.subcomision) and quien.get("subcomision") == s.subcomision
+
+
+def _ver_o_404(s: Sesion, sid: str) -> dict:
+    """Trae la solicitud si esta persona tiene por qué verla."""
+    sol = solicitudes.obtener(sid)
+    if sol is None:
+        raise HTTPException(status_code=404, detail="Esa solicitud no existe.")
+    if not (s.puede(permisos.SOLICITUDES_RESOLVER) or _mia(s, sol)):
+        raise HTTPException(status_code=404, detail="Esa solicitud no existe.")
+    return sol
+
+
+@router.get("/solicitudes", tags=["solicitudes"])
+async def solicitudes_listar(estado: str | None = Query(None),
+                             s: Sesion = Depends(requiere(permisos.SOLICITUDES_CREAR))):
+    """Bandeja de solicitudes.
+
+    Quien resuelve ve todas; una subcomisión ve solo las suyas.
+    """
+    if s.puede(permisos.SOLICITUDES_RESOLVER):
+        items = solicitudes.listar(estado=estado)
+    else:
+        items = [x for x in solicitudes.listar(estado=estado) if _mia(s, x)]
+    return {
+        "items": [solicitudes.con_espacio(x) for x in items],
+        "puede_resolver": s.puede(permisos.SOLICITUDES_RESOLVER),
+        "pendientes": solicitudes.pendientes() if s.puede(permisos.SOLICITUDES_RESOLVER) else 0,
+        "estados": [{"id": e, "titulo": solicitudes.ETIQUETAS[e]} for e in solicitudes.ESTADOS],
+        "repeticiones": [{"id": k, "titulo": v} for k, v in solicitudes.REPETICIONES.items()],
+    }
+
+
+@router.get("/solicitudes/{sid}", tags=["solicitudes"])
+async def solicitudes_detalle(sid: str, s: Sesion = Depends(requiere(permisos.SOLICITUDES_CREAR))):
+    return solicitudes.con_espacio(_ver_o_404(s, sid))
+
+
+@router.post("/solicitudes/conflictos", tags=["solicitudes"])
+async def solicitudes_conflictos(body: dict = Body(...),
+                                 _: Sesion = Depends(requiere(permisos.CALENDARIO_VER))):
+    """Avisa si lo que se está por pedir se pisa con algo ya aprobado. No bloquea."""
+    b = body or {}
+    try:
+        fechas = solicitudes.ocurrencias(b.get("inicio"), b.get("fin"),
+                                         b.get("repeticion") or solicitudes.UNICA,
+                                         b.get("hasta"))
+    except solicitudes.ErrorSolicitud as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    choques = solicitudes.conflictos(b.get("espacio_id", ""), fechas, b.get("excluir_id"))
+    return {"fechas": fechas, "conflictos": choques}
+
+
+@router.post("/solicitudes", tags=["solicitudes"])
+async def solicitudes_crear(body: dict = Body(...),
+                            s: Sesion = Depends(requiere(permisos.SOLICITUDES_CREAR))):
+    try:
+        creada = solicitudes.crear(body or {}, {
+            "uid": s.uid, "usuario": s.usuario, "nombre": s.nombre, "subcomision": s.subcomision})
+    except (solicitudes.ErrorSolicitud, espacios.ErrorEspacio) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return solicitudes.con_espacio(creada)
+
+
+@router.put("/solicitudes/{sid}", tags=["solicitudes"])
+async def solicitudes_editar(sid: str, body: dict = Body(...),
+                             s: Sesion = Depends(requiere(permisos.SOLICITUDES_CREAR))):
+    """Corregir el pedido. Solo quien lo hizo (o quien resuelve), y solo sin resolver."""
+    sol = _ver_o_404(s, sid)
+    if not (s.puede(permisos.SOLICITUDES_RESOLVER) or _mia(s, sol)):
+        raise HTTPException(status_code=403, detail="Solo podés editar tus propias solicitudes.")
+    try:
+        return solicitudes.con_espacio(solicitudes.editar(sid, body or {}, por=s.usuario))
+    except (solicitudes.ErrorSolicitud, espacios.ErrorEspacio) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/solicitudes/{sid}/resolver", tags=["solicitudes"])
+async def solicitudes_resolver(sid: str, body: dict = Body(...),
+                               s: Sesion = Depends(requiere(permisos.SOLICITUDES_RESOLVER))):
+    """Aprobar (pudiendo ajustar fecha/horario/espacio), rechazar o pedir cambios."""
+    _ver_o_404(s, sid)
+    b = body or {}
+    try:
+        r = solicitudes.resolver(sid, b.get("decision", ""), por=s.usuario,
+                                 motivo=b.get("motivo", ""), cambios=b.get("cambios") or None)
+    except (solicitudes.ErrorSolicitud, espacios.ErrorEspacio) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return solicitudes.con_espacio(r)
+
+
+@router.post("/solicitudes/{sid}/cancelar", tags=["solicitudes"])
+async def solicitudes_cancelar(sid: str, body: dict = Body(default={}),
+                               s: Sesion = Depends(requiere(permisos.SOLICITUDES_CREAR))):
+    """Dar de baja. Quien la pidió puede cancelar la suya; quien resuelve, cualquiera."""
+    sol = _ver_o_404(s, sid)
+    if not (s.puede(permisos.SOLICITUDES_RESOLVER) or _mia(s, sol)):
+        raise HTTPException(status_code=403, detail="Solo podés cancelar tus propias solicitudes.")
+    try:
+        return solicitudes.con_espacio(
+            solicitudes.cancelar(sid, por=s.usuario, motivo=(body or {}).get("motivo", "")))
+    except solicitudes.ErrorSolicitud as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ── Cuotas societarias (planilla de Google, solo lectura) ──────────────────────
@@ -533,7 +801,7 @@ async def agenda_events(
 async def cuotas_estado(
     anio: int = Query(None, description="Año (por defecto el más reciente)"),
     fresh: bool = Query(False),
-    _: str = Depends(get_current_username),
+    _: Sesion = Depends(requiere(permisos.KOHA)),
 ):
     """Estado de cuotas de todos los socios para un año."""
     if not cuotas.configured():
@@ -551,7 +819,7 @@ async def cuotas_estado(
 
 
 @router.post("/cuotas/pago", tags=["cuotas"])
-async def cuotas_pago(body: dict = Body(...), user: str = Depends(get_current_username)):
+async def cuotas_pago(body: dict = Body(...), ses: Sesion = Depends(requiere(permisos.KOHA))):
     """Carga (o quita) un pago de cuota desde la app: {matricula, anio, mes, pagado}.
 
     Se guarda en la base de la app y se superpone a la planilla (que no se toca).
@@ -564,14 +832,14 @@ async def cuotas_pago(body: dict = Body(...), user: str = Depends(get_current_us
         raise HTTPException(status_code=400, detail="anio y mes deben ser números.")
     pagado = bool((body or {}).get("pagado"))
     try:
-        res = await asyncio.to_thread(pagos.set_pago, mat, anio, mes, pagado, user)
+        res = await asyncio.to_thread(pagos.set_pago, mat, anio, mes, pagado, ses.usuario)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, **res}
 
 
 @router.get("/cuotas/pagos", tags=["cuotas"])
-async def cuotas_pagos_all(_: str = Depends(get_current_username)):
+async def cuotas_pagos_all(_: Sesion = Depends(requiere(permisos.KOHA))):
     """Todos los pagos cargados desde la app (registro/auditoría)."""
     return {"pagos": await asyncio.to_thread(pagos.all_pagos)}
 
@@ -584,7 +852,7 @@ def _norm_id(x) -> str:
 
 @router.get("/cruce", tags=["cuotas"])
 async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_repository),
-                _: str = Depends(get_current_username)):
+                _: Sesion = Depends(requiere(permisos.KOHA))):
     """Cruza socios de Koha (actividad de préstamo) con la planilla de cuotas (matrícula=carnet)."""
     if not cuotas.configured():
         return {"configured": False}
@@ -655,30 +923,31 @@ async def cruce(fresh: bool = Query(False), repo: KohaRepository = Depends(get_r
 
 # ── Envíos automáticos (lista de reportes configurables) ───────────────────────
 @router.get("/auto/config", tags=["auto"])
-async def auto_config_get(_: str = Depends(get_current_username)):
+async def auto_config_get(_: Sesion = Depends(requiere(permisos.MAILS))):
     """Lista de reportes automáticos + última ejecución de cada uno."""
     return auto_mail.load_config()
 
 
 @router.post("/auto/report", tags=["auto"])
-async def auto_report_add(body: dict = Body(...), _: str = Depends(get_current_username)):
+async def auto_report_add(body: dict = Body(...), _: Sesion = Depends(requiere(permisos.MAILS))):
     """Crea un reporte nuevo. body: {tipo: 'interno'|'socios', nombre}."""
     return auto_mail.add_report((body or {}).get("tipo", "interno"), (body or {}).get("nombre", ""))
 
 
 @router.put("/auto/report/{rid}", tags=["auto"])
-async def auto_report_update(rid: str, partial: dict = Body(...), _: str = Depends(get_current_username)):
+async def auto_report_update(rid: str, partial: dict = Body(...),
+                             _: Sesion = Depends(requiere(permisos.MAILS))):
     """Actualiza (merge) la configuración de un reporte."""
     return auto_mail.update_report(rid, partial)
 
 
 @router.delete("/auto/report/{rid}", tags=["auto"])
-async def auto_report_delete(rid: str, _: str = Depends(get_current_username)):
+async def auto_report_delete(rid: str, _: Sesion = Depends(requiere(permisos.MAILS))):
     return auto_mail.delete_report(rid)
 
 
 @router.get("/auto/preview/{rid}", tags=["auto"])
-async def auto_preview(rid: str, _: str = Depends(get_current_username)):
+async def auto_preview(rid: str, _: Sesion = Depends(requiere(permisos.MAILS))):
     """Vista previa de lo que se enviaría (sin enviar nada)."""
     rep = auto_mail.get_report(rid)
     if not rep:
@@ -691,21 +960,21 @@ async def auto_preview(rid: str, _: str = Depends(get_current_username)):
 
 @router.post("/auto/run/{rid}", tags=["auto"])
 async def auto_run(rid: str, body: dict = Body(default={}),
-                   usuario: str = Depends(get_current_username)):
+                   ses: Sesion = Depends(requiere(permisos.MAILS))):
     """Ejecuta un reporte ahora. Si se pasa test_to, manda una prueba a esa dirección."""
     rep = auto_mail.get_report(rid)
     if not rep:
         raise HTTPException(status_code=404, detail="Reporte desconocido.")
     try:
         return await auto_mail.run_report(rep, test_to=(body or {}).get("test_to") or None,
-                                          usuario=usuario)
+                                          usuario=ses.usuario)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/auto/history/{rid}", tags=["auto"])
 async def auto_history(rid: str, limit: int = Query(20, ge=1, le=100),
-                       _: str = Depends(get_current_username)):
+                       _: Sesion = Depends(requiere(permisos.MAILS))):
     """Historial de ejecuciones de un reporte: cuándo, cómo se disparó y a quién se envió."""
     return {"items": auto_mail.get_history(rid, limit)}
 
@@ -715,14 +984,14 @@ async def auto_history(rid: str, limit: int = Query(20, ge=1, le=100),
 async def envios_listar(origen: str | None = Query(None, pattern="^(auto|manual)$"),
                         report_id: str | None = Query(None),
                         limit: int = Query(50, ge=1, le=200),
-                        _: str = Depends(get_current_username)):
+                        _: Sesion = Depends(requiere(permisos.MAILS))):
     """Lista de envíos hechos: los automáticos y los de la pestaña Mails."""
     return {"items": historial.listar(origen=origen, report_id=report_id, limit=limit),
             "seguimiento_activo": tracking.enabled()}
 
 
 @router.get("/envios/{run_id}", tags=["envios"])
-async def envios_detalle(run_id: str, _: str = Depends(get_current_username)):
+async def envios_detalle(run_id: str, _: Sesion = Depends(requiere(permisos.MAILS))):
     """Detalle de un envío: cada destinatario, el mensaje que recibió y si lo abrió."""
     run = historial.get_run(run_id)
     if not run:

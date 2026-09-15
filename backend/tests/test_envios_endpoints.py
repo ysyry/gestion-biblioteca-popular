@@ -2,8 +2,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import historial, mail, tracking
-from app.auth import get_current_username
+from app import historial, mail, permisos, tracking
+from app.auth import Sesion, get_current_username, get_session
 from app.main import app
 
 
@@ -11,9 +11,15 @@ from app.main import app
 def cliente(store):
     """App con la sesión resuelta (los tests no hablan con Koha).
 
+    Se hace pasar por una bibliotecaria: así los endpoints con guarda de permiso
+    (Mails, Historial de envíos) la dejan pasar.
+
     Sin `with`: así no se disparan los eventos de arranque (warmup contra Koha y
     el programador de automáticos), que acá no queremos.
     """
+    sesion = Sesion(sid="test", usuario="flor", nombre="Flor", rol="bibliotecaria",
+                    permisos=permisos.permisos_de("bibliotecaria"))
+    app.dependency_overrides[get_session] = lambda: sesion
     app.dependency_overrides[get_current_username] = lambda: "flor"
     yield TestClient(app)
     app.dependency_overrides.clear()

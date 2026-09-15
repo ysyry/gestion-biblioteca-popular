@@ -45,6 +45,18 @@
   .tabs button.active { background:rgba(255,255,255,.12); color:#fff; font-weight:600;
              border-left-color:var(--yellow); }
 
+  /* ── Grupos plegables del menú ("Envíos", "Reportes") ─────────────────── */
+  .tab-grupo { display:flex; flex-direction:column; }
+  .tabs .grupo-cab { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .tabs .grupo-cab .chev { transition:transform .16s; opacity:.55; font-size:1rem; line-height:1; }
+  .tab-grupo.abierto .grupo-cab .chev { transform:rotate(90deg); }
+  /* Grupo plegado con la sección abierta adentro: se marca para no perderla de vista */
+  .tab-grupo.con-activo:not(.abierto) .grupo-cab { color:#fff; background:rgba(255,255,255,.07); }
+  .grupo-items { display:none; margin:.1rem 0 .3rem; padding-left:.55rem;
+                 border-left:1px solid rgba(255,255,255,.14); }
+  .tab-grupo.abierto .grupo-items { display:flex; flex-direction:column; gap:.1rem; }
+  .tabs .grupo-items button.sub { font-size:.87rem; padding:.5rem .8rem; }
+
   .sidebar .foot { margin-top:auto; padding:1rem 1.3rem 1.3rem; border-top:1px solid rgba(255,255,255,.1);
              font-size:.82rem; }
   .sidebar .foot .user { display:block; opacity:.8; margin-bottom:.55rem; word-break:break-word; }
@@ -306,9 +318,57 @@
   .badge.red { background:#fbe4e8; color:var(--red); }
   .badge.green { background:#e3f5ec; color:var(--green); }
   .badge.gray { background:#eef0f3; color:#5b6270; }
+  .badge.magenta { background:#f3eef8; color:var(--magenta); }
+  .badge.navy { background:#e8ecf7; color:var(--navy); }
+
+  /* ── Usuarios de la app ──────────────────────────────────────────────── */
+  .tbl-scroll { overflow-x:auto; }                    /* tablas anchas: scrollea la tabla, no la página */
+  .usr-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:0 1.1rem; }
+  .usr-grid label { margin-top:.55rem; }
+  .usr-acc { white-space:nowrap; text-align:right; }
+  .usr-acc .btn-sec { padding:.32rem .6rem; font-size:.78rem; margin-left:.3rem; }
+  tr.usr-off td { opacity:.55; }
+  .clave-box { display:flex; align-items:center; gap:.7rem; background:#f4f5f7;
+               border:1px dashed var(--line); border-radius:10px; padding:.7rem .9rem; }
+  .clave-box code { font-size:1.15rem; font-weight:700; letter-spacing:.06em;
+               color:var(--navy); flex:1; word-break:break-all; }
+  @media (max-width:760px){ .usr-grid { grid-template-columns:1fr; } }
 
   .msg { padding:.75rem .9rem; border-radius:9px; font-size:.88rem; margin-bottom:1rem; }
   .msg.error { background:#fbe4e8; color:var(--red); border:1px solid #f3c2cc; }
+  .msg.ok { background:#e3f5ec; color:#0e7a4d; border:1px solid #b8e5cd; }
+
+  /* ── Solicitudes de espacio ────────────────────────────────────────────── */
+  .sol-card { border:1px solid var(--line); border-left:4px solid var(--line); border-radius:12px;
+              padding:1rem 1.1rem; margin-bottom:.9rem; background:#fff; }
+  .sol-card.estado-pendiente    { border-left-color:var(--yellow); }
+  .sol-card.estado-aprobada     { border-left-color:var(--green); }
+  .sol-card.estado-observaciones{ border-left-color:var(--magenta); }
+  .sol-card.estado-rechazada    { border-left-color:var(--red); }
+  .sol-card.estado-cancelada    { border-left-color:var(--line); opacity:.65; }
+  .sol-head { display:flex; justify-content:space-between; align-items:flex-start;
+              gap:.8rem; flex-wrap:wrap; }
+  .sol-head b { color:var(--navy); margin-right:.5rem; }
+  .sol-cuando { margin-top:.45rem; font-size:.9rem; color:var(--ink); }
+  .sol-desc { margin:.5rem 0 0; font-size:.88rem; color:var(--muted); line-height:1.45; }
+  .sol-nec { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.5rem; }
+  .sol-nec .tag { background:#f3eef8; color:var(--magenta); border-radius:999px;
+                  padding:.12rem .6rem; font-size:.74rem; font-weight:600; }
+  .sol-cambio { margin-top:.55rem; font-size:.82rem; color:#8a5a00; background:#fff4e0;
+                border-radius:8px; padding:.45rem .7rem; }
+  .sol-motivo { margin-top:.55rem; font-size:.85rem; background:#f4f5f7;
+                border-radius:8px; padding:.5rem .7rem; line-height:1.45; }
+  .sol-card .row-btns { margin-top:.9rem; }
+
+  .sol-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:0 1.1rem; }
+  .sol-grid label { margin-top:.55rem; }
+  .sol-grid .ancho { grid-column:1 / -1; }
+  .chk-fila { display:flex; flex-wrap:wrap; gap:.5rem 1.1rem; margin:.35rem 0 .5rem; }
+  label.chk { display:inline-flex; align-items:center; gap:.35rem; margin:0;
+              font-size:.86rem; color:var(--ink); cursor:pointer; text-transform:none; }
+  select { width:100%; padding:.6rem .75rem; border:1px solid var(--line); border-radius:9px;
+           font-size:.95rem; font-family:inherit; background:#fff; }
+  @media (max-width:760px){ .sol-grid { grid-template-columns:1fr; } }
   .hide { display:none; }
   .meta { color:var(--muted); font-size:.82rem; margin-top:.7rem; }
   .empty { color:var(--muted); font-size:.86rem; font-style:italic; }
@@ -454,13 +514,14 @@
     <p class="sub">Gestión de la biblioteca</p>
     <div id="loginMsg"></div>
     <form id="loginForm">
-      <label for="u">Usuario de Koha</label>
+      <label for="u">Usuario</label>
       <input id="u" autocomplete="username" required />
       <label for="p">Contraseña</label>
       <input id="p" type="password" autocomplete="current-password" required />
       <button class="primary" id="loginBtn" type="submit">Entrar</button>
     </form>
-    <p class="meta">Entrá con tu mismo usuario y contraseña del sistema Koha.</p>
+    <p class="meta">Bibliotecarias: con el mismo usuario y contraseña de Koha.<br>
+       Comisión y subcomisiones: con el usuario que les dio la biblioteca.</p>
   </section>
 </div>
 
@@ -472,19 +533,12 @@
         <img src="/logo.png" alt="BPOB" />
         <div class="t"><b>Osvaldo Bayer</b><span>Gestión de biblioteca</span></div>
       </div>
-      <nav class="tabs">
-        <button data-tab="stats" class="active">Inicio</button>
-        <button data-tab="estrategia">Estrategia</button>
-        <button data-tab="loans">Préstamos</button>
-        <button data-tab="members">Socios</button>
-        <button data-tab="cuotas">Cuotas</button>
-        <button data-tab="agenda">Agenda</button>
-        <button data-tab="mails">Mails</button>
-        <button data-tab="auto">Automáticos</button>
-        <button data-tab="envios">Historial de envíos</button>
-      </nav>
+      <!-- El menú lo arma enterApp() con las secciones que permite el rol
+           (ver /api/me): así nadie ve una pestaña que después le daría 403. -->
+      <nav class="tabs" id="tabs"></nav>
       <div class="foot">
         <span class="user" id="userLabel"></span>
+        <button id="claveBtn" class="hide" style="margin-bottom:.4rem">Cambiar contraseña</button>
         <button id="logoutBtn">Cerrar sesión</button>
       </div>
     </aside>
@@ -506,6 +560,25 @@
       <!-- Agenda -->
       <div id="agendaView" class="hide">
         <div id="agendaContent"></div>
+      </div>
+
+      <!-- Solicitudes de espacio y fecha -->
+      <div id="solicitudesView" class="hide">
+        <div class="card">
+          <div class="hist-toolbar">
+            <button class="primary" style="width:auto;margin:0" id="solNueva">+ Solicitar espacio</button>
+            <div class="subtabs" id="solFiltro">
+              <button data-estado="" class="active">Todas</button>
+              <button data-estado="pendiente">Pendientes</button>
+              <button data-estado="aprobada">Aprobadas</button>
+            </div>
+            <button class="btn-sec" id="solEspacios">Espacios</button>
+            <button class="btn-refresh" id="solRef">↻</button>
+          </div>
+          <div id="solMsg"></div>
+          <div id="solForm" class="hide"></div>
+          <div id="solLista">Cargando…</div>
+        </div>
       </div>
 
       <!-- Cuotas -->
@@ -619,6 +692,24 @@
           <div id="enviosLista"></div>
         </div>
       </div>
+
+      <!-- Usuarios de la app (comisión directiva y subcomisiones) -->
+      <div id="usuariosView" class="hide">
+        <div class="card">
+          <p class="meta" style="margin:0 0 1rem">
+            Las bibliotecarias entran con su usuario de <b>Koha</b> y no hace falta darlas
+            de alta acá. Esta lista es para la <b>comisión directiva</b> y las
+            <b>subcomisiones</b>, que no tienen usuario de Koha.
+          </p>
+          <div class="hist-toolbar">
+            <button class="primary" style="width:auto;margin:0" id="usrNuevo">+ Nuevo usuario</button>
+            <button class="btn-refresh" id="usrRef">↻</button>
+          </div>
+          <div id="usrMsg"></div>
+          <div id="usrForm" class="hide"></div>
+          <div id="usrLista">Cargando…</div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -626,7 +717,10 @@
 <script>
 let token = localStorage.getItem("token") || "";
 let currentTab = "active";
-const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", cuotas:"Cuotas societarias", agenda:"Agenda de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos" };
+// Perfil de quien está adentro (rol, permisos y secciones). Lo trae /api/me.
+let ME = null;
+const puede = (p)=> !!(ME && ME.permisos && ME.permisos.includes(p));
+const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
 let loanSub = "todos";
 let loansAll = null;  // cache de loans_contact mientras se está en la pestaña Préstamos
 
@@ -735,16 +829,64 @@ function doLogout(){ token=""; localStorage.removeItem("token"); show($("appView
 $("logoutBtn").addEventListener("click", async ()=>{ try{ await api("/api/auth/logout",{method:"POST"});}catch(_){} doLogout(); });
 
 // ── Tabs ──
-function enterApp(){
+async function enterApp(){
   show($("loginView"),false); show($("appView"),true);
-  $("userLabel").textContent = localStorage.getItem("username")||"";
-  selectTab("stats");
+  try { ME = await api("/api/me"); }
+  catch(err){ doLogout(); return; }      // token viejo o sesión caída: al login
+
+  $("userLabel").innerHTML = `${esc(ME.nombre||ME.username)}<br>`+
+    `<small style="opacity:.65">${esc(ME.rol_etiqueta||"")}`+
+    `${ME.subcomision ? " · "+esc(ME.subcomision) : ""}</small>`;
+  // La contraseña de las bibliotecarias es la de Koha: se cambia allá, no acá.
+  show($("claveBtn"), !ME.es_de_koha);
+
+  renderMenu();
+  const secs=ME.secciones||[];
+  if(secs.length) selectTab(secs[0].id);
+  else msg($("panelMsg"),"Tu usuario todavía no tiene ninguna sección asignada. Avisale a la biblioteca.","error");
 }
-document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>selectTab(b.dataset.tab)));
+// Dibuja el menú lateral: entradas sueltas y grupos plegables ("Envíos", "Reportes").
+// El grupo que contiene la sección abierta queda desplegado solo.
+function renderMenu(){
+  const nav=$("tabs"), menu=(ME&&ME.menu)||[];
+  nav.innerHTML = menu.map(e=>{
+    if(e.tipo!=="grupo")
+      return `<button data-tab="${esc(e.id)}">${esc(e.titulo)}</button>`;
+    const abierto = e.items.some(i=>i.id===currentTab);
+    const hijos = e.items.map(i=>
+      `<button class="sub" data-tab="${esc(i.id)}">${esc(i.titulo)}</button>`).join("");
+    return `<div class="tab-grupo${abierto?" abierto":""}" data-grupo="${esc(e.titulo)}">
+      <button class="grupo-cab" aria-expanded="${abierto}">
+        <span>${esc(e.titulo)}</span><span class="chev">›</span></button>
+      <div class="grupo-items">${hijos}</div></div>`;
+  }).join("");
+
+  nav.querySelectorAll("button[data-tab]").forEach(b=>
+    b.addEventListener("click",()=>selectTab(b.dataset.tab)));
+  nav.querySelectorAll(".grupo-cab").forEach(b=>b.addEventListener("click",()=>{
+    const g=b.closest(".tab-grupo"), abierto=g.classList.toggle("abierto");
+    b.setAttribute("aria-expanded", abierto);
+  }));
+}
+
+// Marca la sección abierta y despliega su grupo si estaba plegado.
+function marcarMenu(tab){
+  const nav=$("tabs"); if(!nav) return;
+  nav.querySelectorAll("button[data-tab]").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  const activo=nav.querySelector(`button[data-tab="${CSS.escape(tab)}"]`);
+  const grupo=activo&&activo.closest(".tab-grupo");
+  if(grupo && !grupo.classList.contains("abierto")){
+    grupo.classList.add("abierto");
+    grupo.querySelector(".grupo-cab").setAttribute("aria-expanded","true");
+  }
+  nav.querySelectorAll(".tab-grupo").forEach(g=>
+    g.classList.toggle("con-activo", g.contains(activo)));
+}
+
 document.querySelectorAll("#loansSubtabs button").forEach(b=>b.addEventListener("click",()=>selectLoanView(b.dataset.sub)));
 function selectTab(tab){
   currentTab=tab;
-  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  marcarMenu(tab);
   $("pageTitle").textContent = TAB_TITLES[tab] || "";
   show($("fichaView"),false);
   show($("statsView"), tab==="stats");
@@ -754,7 +896,9 @@ function selectTab(tab){
   show($("mailsView"), tab==="mails");
   show($("autoView"), tab==="auto");
   show($("enviosView"), tab==="envios");
-  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas"].includes(tab));
+  show($("usuariosView"), tab==="usuarios");
+  show($("solicitudesView"), tab==="solicitudes");
+  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes"].includes(tab));
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
   show($("cruceSection"), tab==="members");
@@ -771,6 +915,8 @@ function selectTab(tab){
     ensureCuotaMap().then(()=>{ updatePreview(); }); }
   else if (tab==="auto") { loadAuto(); }
   else if (tab==="envios") { loadEnvios(); }
+  else if (tab==="usuarios") { loadUsuarios(); }
+  else if (tab==="solicitudes") { loadSolicitudes(); }
 }
 function estadoBadge(v){ return Number(v)>0 ? '<span class="badge red">Vencido</span>' : '<span class="badge green">En préstamo</span>'; }
 const TODOS_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha],["Estado","dias_atraso",estadoBadge]];
@@ -1341,7 +1487,7 @@ async function loadAgenda(){
     const from=new Date(); from.setDate(from.getDate()-31);
     const r=await api(`/api/agenda?desde=${from.toISOString().slice(0,10)}&dias=320`);
     if(!r.configured){ el.innerHTML=agendaNoConfig(); return; }
-    agAll=r.events||[]; agCals=r.calendarios||[];
+    agAll=r.events||[]; agCals=r.calendarios||[]; agAviso=r.aviso||null;
     if(!agActive.size) agCals.forEach(c=>agActive.add(c.nombre));
     agRef=new Date();
     renderAgenda();
@@ -1353,6 +1499,7 @@ function agRangeLabel(){
   return `${MESES[agRef.getMonth()+1]} ${agRef.getFullYear()}`;
 }
 function agShift(dir){ if(agMode==='week') agRef.setDate(agRef.getDate()+7*dir); else agRef.setMonth(agRef.getMonth()+dir); agRef=new Date(agRef); }
+let agAviso=null;
 function renderAgenda(){
   const el=$("agendaContent");
   const modes=[['week','Semana'],['month','Mes']]
@@ -1362,7 +1509,18 @@ function renderAgenda(){
   const nav =
     `<div class="ag-nav"><button id="agPrev">‹</button><button id="agToday">Hoy</button><button id="agNext">›</button>
        <span class="ag-range">${agRangeLabel()}</span></div>`;
-  el.innerHTML=`<div class="ag-toolbar"><div class="subtabs">${modes}</div>${nav}<div class="cal-filter">${chips}</div></div><div id="agBody"></div>`;
+  // Desde el calendario se pide el espacio: es donde uno se da cuenta de que lo necesita.
+  const pedir = puede("solicitudes.crear")
+    ? `<button class="primary" style="width:auto;margin:0" id="agPedir">+ Solicitar espacio</button>` : "";
+  el.innerHTML=`<div class="ag-toolbar"><div class="subtabs">${modes}</div>${nav}${pedir}<div class="cal-filter">${chips}</div></div><div id="agBody"></div>`;
+  // Si Google no contestó, se avisa, pero las reservas propias igual se muestran.
+  if(agAviso) el.insertAdjacentHTML("afterbegin",
+    `<div class="msg" style="background:#fff4e0;color:#8a5a00;border:1px solid #f0d5a0">${esc(agAviso)}</div>`);
+  if(pedir) $("agPedir").onclick=async ()=>{
+    selectTab("solicitudes");
+    await loadSolicitudes();
+    solFormulario(null);
+  };
   el.querySelectorAll('.subtabs button').forEach(b=>b.onclick=()=>{ agMode=b.dataset.mode; renderAgenda(); });
   el.querySelectorAll('.cal-chip-btn').forEach(b=>b.onclick=()=>{ const n=b.dataset.cal; agActive.has(n)?agActive.delete(n):agActive.add(n); renderAgenda(); });
   $("agPrev").onclick=()=>{ agShift(-1); renderAgenda(); };
@@ -1966,6 +2124,564 @@ document.querySelectorAll("#enviosFiltro button").forEach(b=>b.addEventListener(
   loadEnvios();
 }));
 $("enviosRef").addEventListener("click",loadEnvios);
+
+
+// ══ Usuarios de la app ═══════════════════════════════════════════════════════
+// Comisión directiva y subcomisiones. Las bibliotecarias no están acá: entran
+// con Koha. Solo llega a esta sección quien tiene el permiso usuarios.admin.
+let usrDatos = { items:[], roles:[], subcomisiones:[] };
+
+async function loadUsuarios(){
+  const cont=$("usrLista"); cont.innerHTML=LOADER_SM; msg($("usrMsg"),"","");
+  show($("usrForm"),false);
+  try { usrDatos = await api("/api/usuarios"); }
+  catch(err){ cont.innerHTML=""; msg($("usrMsg"),err.message,"error"); return; }
+  renderUsuarios();
+}
+
+function renderUsuarios(){
+  const items=usrDatos.items||[];
+  if(!items.length){
+    $("usrLista").innerHTML='<p class="empty">Todavía no hay usuarios cargados. '+
+      'Creá el primero con “+ Nuevo usuario”.</p>';
+    return;
+  }
+  const fila = u => `<tr class="${u.activo?"":"usr-off"}">
+    <td><b>${esc(u.nombre)}</b>${u.email?`<br><span class="meta">${esc(u.email)}</span>`:""}</td>
+    <td><code>${esc(u.usuario)}</code></td>
+    <td>${rolBadge(u.rol)}${u.subcomision?`<br><span class="meta">${esc(u.subcomision)}</span>`:""}</td>
+    <td>${u.activo?'<span class="badge green">Activo</span>':'<span class="badge">Desactivado</span>'}</td>
+    <td class="meta">${u.ultimo_acceso?fechaHora(u.ultimo_acceso):"nunca entró"}</td>
+    <td class="usr-acc">
+      <button class="btn-sec" data-usr="editar" data-id="${u.id}">Editar</button>
+      <button class="btn-sec" data-usr="clave"  data-id="${u.id}">Resetear clave</button>
+      <button class="btn-sec" data-usr="activo" data-id="${u.id}">${u.activo?"Desactivar":"Activar"}</button>
+      <button class="btn-sec danger" data-usr="borrar" data-id="${u.id}">Borrar</button>
+    </td></tr>`;
+  $("usrLista").innerHTML=`<div class="tbl-scroll"><table>
+    <thead><tr><th>Persona</th><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th></th></tr></thead>
+    <tbody>${items.map(fila).join("")}</tbody></table></div>`;
+}
+
+function rolBadge(rol){
+  const r=(usrDatos.roles||[]).find(x=>x.id===rol);
+  const color={bibliotecaria:"magenta", comision:"navy", subcomision:"green"}[rol]||"gray";
+  return `<span class="badge ${color}">${esc(r?r.titulo:rol)}</span>`;
+}
+
+function fechaHora(iso){
+  try { return new Date(iso).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
+  catch(_){ return String(iso).slice(0,16).replace("T"," "); }
+}
+
+// ── Alta / edición ──
+function usrFormulario(u){
+  const nuevo=!u;
+  const opcRol=(usrDatos.roles||[]).map(r=>
+    `<option value="${esc(r.id)}"${u&&u.rol===r.id?" selected":""}>${esc(r.titulo)}</option>`).join("");
+  const opcSub=(usrDatos.subcomisiones||[]).map(s=>`<option value="${esc(s)}">`).join("");
+  $("usrForm").innerHTML=`<div class="card" style="background:#fbfbfd;margin-bottom:1rem">
+    <h3 style="margin:0 0 .8rem;font-size:1rem;color:var(--navy)">${nuevo?"Nuevo usuario":"Editar "+esc(u.nombre)}</h3>
+    <div class="usr-grid">
+      <div><label for="usrNombre">Nombre y apellido</label>
+        <input id="usrNombre" value="${esc(u?u.nombre:"")}" /></div>
+      <div><label for="usrUsuario">Usuario para entrar</label>
+        <input id="usrUsuario" value="${esc(u?u.usuario:"")}" ${nuevo?"":"disabled"}
+               placeholder="ej: prensa o ana@bibliotecabayer.org.ar" /></div>
+      <div><label for="usrEmail">Email (opcional)</label>
+        <input id="usrEmail" type="email" value="${esc(u?u.email:"")}" /></div>
+      <div><label for="usrRol">Rol</label>
+        <select id="usrRol">${opcRol}</select></div>
+      <div><label for="usrSub">Subcomisión</label>
+        <input id="usrSub" list="usrSubLista" value="${esc(u?u.subcomision:"")}"
+               placeholder="solo si el rol es Subcomisión" />
+        <datalist id="usrSubLista">${opcSub}</datalist></div>
+      ${nuevo?`<div><label for="usrPass">Contraseña (vacío = se genera una)</label>
+        <input id="usrPass" type="text" autocomplete="new-password" /></div>`:""}
+    </div>
+    <div class="row-btns">
+      <button class="btn-sec" id="usrCancelar">Cancelar</button>
+      <button class="primary" style="width:auto;margin:0" id="usrGuardar">${nuevo?"Crear usuario":"Guardar cambios"}</button>
+    </div></div>`;
+  show($("usrForm"),true);
+  $("usrForm").scrollIntoView({behavior:"smooth", block:"nearest"});
+  $("usrCancelar").onclick=()=>show($("usrForm"),false);
+  $("usrGuardar").onclick=(e)=>usrGuardar(u, e.currentTarget);
+}
+
+async function usrGuardar(u, btn){
+  const cuerpo={
+    nombre:$("usrNombre").value.trim(),
+    email:$("usrEmail").value.trim(),
+    rol:$("usrRol").value,
+    subcomision:$("usrSub").value.trim(),
+  };
+  const restore=btnBusy(btn, u?"Guardando…":"Creando…");
+  try{
+    if(u){
+      await api("/api/usuarios/"+u.id,{method:"PUT",body:JSON.stringify(cuerpo)});
+      msg($("usrMsg"),`Listo: se actualizó <b>${esc(cuerpo.nombre)}</b>.`,"ok");
+    } else {
+      cuerpo.usuario=$("usrUsuario").value.trim();
+      cuerpo.password=$("usrPass").value.trim();
+      const d=await api("/api/usuarios",{method:"POST",body:JSON.stringify(cuerpo)});
+      mostrarClave(d.password, d.usuario.nombre, d.usuario.usuario);
+    }
+    show($("usrForm"),false);
+    await loadUsuarios();
+  } catch(err){ msg($("usrMsg"),err.message,"error"); }
+  finally { restore(); }
+}
+
+// ── Contraseña recién generada: se muestra UNA vez ──
+function mostrarClave(clave, nombre, usuario){
+  const bg=document.createElement("div"); bg.className="modal-bg";
+  bg.innerHTML=`<div class="modal"><h3>Contraseña de ${esc(nombre)}</h3>
+    <p style="margin:.2rem 0 .8rem;line-height:1.5">Anotala y pasásela a la persona:
+      <b>esta es la única vez que se ve</b>. Después solo se puede resetear.</p>
+    <div class="clave-box">
+      <code id="claveTxt">${esc(clave)}</code>
+      <button class="btn-sec" id="claveCopiar">Copiar</button>
+    </div>
+    <p class="meta" style="margin:.7rem 0 0">Entra con el usuario <code>${esc(usuario)}</code>.</p>
+    <div class="row-btns"><button class="primary" style="width:auto;margin:0" id="claveOk">Listo</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.querySelector("#claveCopiar").onclick=async (e)=>{
+    try{ await navigator.clipboard.writeText(clave); e.target.textContent="¡Copiada!"; }
+    catch(_){ e.target.textContent="Copiala a mano"; }
+  };
+  const cerrar=()=>bg.remove();
+  bg.querySelector("#claveOk").onclick=cerrar;
+  bg.onclick=e=>{ if(e.target===bg) cerrar(); };
+}
+
+// ── Acciones de la tabla (delegado: la tabla se vuelve a dibujar) ──
+document.addEventListener("click", async (e)=>{
+  const b=e.target.closest("[data-usr]"); if(!b) return;
+  const u=(usrDatos.items||[]).find(x=>x.id===b.dataset.id); if(!u) return;
+  const accion=b.dataset.usr;
+
+  if(accion==="editar") return usrFormulario(u);
+
+  if(accion==="clave"){
+    if(!await uiConfirm({title:"Resetear contraseña",
+        message:`Se le va a generar una contraseña nueva a <b>${esc(u.nombre)}</b>. La anterior deja de servir.`,
+        ok:"Resetear"})) return;
+    try{
+      const d=await api(`/api/usuarios/${u.id}/password`,{method:"POST",body:"{}"});
+      mostrarClave(d.password, u.nombre, u.usuario);
+    } catch(err){ msg($("usrMsg"),err.message,"error"); }
+    return;
+  }
+
+  if(accion==="activo"){
+    try{
+      await api("/api/usuarios/"+u.id,{method:"PUT",body:JSON.stringify({activo:!u.activo})});
+      msg($("usrMsg"),`<b>${esc(u.nombre)}</b> quedó ${u.activo?"desactivada/o":"activa/o"}.`,"ok");
+      await loadUsuarios();
+    } catch(err){ msg($("usrMsg"),err.message,"error"); }
+    return;
+  }
+
+  if(accion==="borrar"){
+    if(!await uiConfirm({title:"Borrar usuario", danger:true, ok:"Borrar",
+        message:`Se borra a <b>${esc(u.nombre)}</b> para siempre.<br>`+
+                `Si es alguien que quizás vuelva, conviene <b>desactivarla/o</b> en vez de borrar.`})) return;
+    try{
+      await api("/api/usuarios/"+u.id,{method:"DELETE"});
+      await loadUsuarios();
+    } catch(err){ msg($("usrMsg"),err.message,"error"); }
+  }
+});
+
+$("usrNuevo").addEventListener("click", ()=>usrFormulario(null));
+$("usrRef").addEventListener("click", loadUsuarios);
+
+// ── Cambiar la propia contraseña ──
+$("claveBtn").addEventListener("click", ()=>{
+  const bg=document.createElement("div"); bg.className="modal-bg";
+  bg.innerHTML=`<div class="modal"><h3>Cambiar mi contraseña</h3>
+    <div id="miClaveMsg"></div>
+    <label for="miActual">Contraseña actual</label>
+    <input id="miActual" type="password" autocomplete="current-password" />
+    <label for="miNueva">Contraseña nueva (mínimo 8 caracteres)</label>
+    <input id="miNueva" type="password" autocomplete="new-password" />
+    <div class="row-btns"><button class="btn-sec" id="miNo">Cancelar</button>
+      <button class="primary" style="width:auto;margin:0" id="miOk">Cambiar</button></div></div>`;
+  document.body.appendChild(bg);
+  const cerrar=()=>bg.remove();
+  bg.querySelector("#miNo").onclick=cerrar;
+  bg.onclick=e=>{ if(e.target===bg) cerrar(); };
+  bg.querySelector("#miOk").onclick=async (e)=>{
+    const restore=btnBusy(e.currentTarget,"Cambiando…");
+    try{
+      await api("/api/password",{method:"POST",body:JSON.stringify({
+        actual:bg.querySelector("#miActual").value, nueva:bg.querySelector("#miNueva").value})});
+      cerrar();
+      msg($("panelMsg"),"Listo: tu contraseña quedó cambiada.","ok");
+    } catch(err){ msg(bg.querySelector("#miClaveMsg"),err.message,"error"); }
+    finally { restore(); }
+  };
+});
+
+
+
+// ══ Solicitudes de espacio ═══════════════════════════════════════════════════
+// Una subcomisión pide un espacio y una fecha; bibliotecarias y comisión directiva
+// resuelven. Al aprobar se puede mover fecha, horario o espacio: en la práctica casi
+// nunca se aprueba exactamente lo pedido, así que aprobar y ajustar es un solo paso.
+let solDatos = { items:[], puede_resolver:false, repeticiones:[] };
+let solEspaciosCache = { items:[], puede_editar:false };
+let solEstadoFiltro = "";
+
+const NECESIDADES = ["Proyector","Sillas","Mesas","Sonido","Wifi","Cocina"];
+
+async function loadSolicitudes(){
+  const cont=$("solLista"); cont.innerHTML=LOADER_SM; msg($("solMsg"),"","");
+  show($("solForm"),false);
+  try {
+    [solDatos, solEspaciosCache] = await Promise.all([
+      api("/api/solicitudes"+(solEstadoFiltro?`?estado=${solEstadoFiltro}`:"")),
+      api("/api/espacios"),
+    ]);
+  } catch(err){ cont.innerHTML=""; msg($("solMsg"),err.message,"error"); return; }
+  show($("solEspacios"), solEspaciosCache.puede_editar);
+  renderSolicitudes();
+}
+
+function renderSolicitudes(){
+  const items=solDatos.items||[];
+  if(!items.length){
+    $("solLista").innerHTML='<p class="empty">'+(solEstadoFiltro
+      ? "No hay solicitudes en ese estado."
+      : "Todavía no hay solicitudes. Pedí un espacio con “+ Solicitar espacio”.")+"</p>";
+    return;
+  }
+  $("solLista").innerHTML=items.map(tarjetaSolicitud).join("");
+}
+
+const SOL_COLOR = {pendiente:"gray", aprobada:"green", observaciones:"magenta",
+                   rechazada:"red", cancelada:"gray"};
+
+function fechaHumana(iso){
+  if(!iso) return "";
+  const d=new Date(iso);
+  return d.toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"})
+       + " · " + d.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+}
+function soloHora(iso){
+  return iso ? new Date(iso).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) : "";
+}
+
+function tarjetaSolicitud(s){
+  const q=s.solicitante||{};
+  const repetida = s.fechas && s.fechas.length>1;
+  const cuando = `${fechaHumana(s.inicio)} a ${soloHora(s.fin)}` +
+    (repetida ? ` · <b>${s.fechas.length} fechas</b> (${esc(s.repeticion_etiqueta||"")})` : "");
+
+  // Si al aprobar se movió algo, se muestra qué se pidió y qué quedó.
+  const orig = s.pedido_original;
+  const cambio = orig ? `<div class="sol-cambio">Se había pedido:
+      ${esc(fechaHumana(orig.inicio))}${orig.espacio_id!==s.espacio_id?" · otro espacio":""}</div>` : "";
+
+  const motivo = s.resolucion && s.resolucion.motivo
+    ? `<div class="sol-motivo"><b>${esc(s.estado_etiqueta)}:</b> ${esc(s.resolucion.motivo)}</div>` : "";
+
+  const nec = (s.necesidades||[]).length
+    ? `<div class="sol-nec">${s.necesidades.map(n=>`<span class="tag">${esc(n)}</span>`).join("")}</div>` : "";
+
+  const acciones=[];
+  if(solDatos.puede_resolver && ["pendiente","observaciones"].includes(s.estado))
+    acciones.push(`<button class="primary" style="width:auto;margin:0" data-sol="resolver" data-id="${s.id}">Resolver</button>`);
+  if(["pendiente","observaciones"].includes(s.estado))
+    acciones.push(`<button class="btn-sec" data-sol="editar" data-id="${s.id}">Editar</button>`);
+  if(s.estado!=="cancelada" && s.estado!=="rechazada")
+    acciones.push(`<button class="btn-sec danger" data-sol="cancelar" data-id="${s.id}">Cancelar</button>`);
+
+  return `<article class="sol-card estado-${esc(s.estado)}">
+    <div class="sol-head">
+      <div>
+        <b>${esc(s.titulo)}</b>
+        <span class="badge ${SOL_COLOR[s.estado]||"gray"}">${esc(s.estado_etiqueta)}</span>
+      </div>
+      <div class="meta" style="margin:0">${esc(q.nombre||q.usuario||"")}${q.subcomision?` · ${esc(q.subcomision)}`:""}</div>
+    </div>
+    <div class="sol-cuando">📍 ${esc(s.espacio)} &nbsp;·&nbsp; ${cuando}</div>
+    ${s.descripcion?`<p class="sol-desc">${esc(s.descripcion)}</p>`:""}
+    <div class="meta" style="margin:.3rem 0 0">
+      ${s.personas?`${s.personas} personas · `:""}
+      ${s.abierta_publico?"Abierta al público · ":""}${s.arancelada?"Arancelada":"Gratuita"}
+    </div>
+    ${nec}${cambio}${motivo}
+    ${acciones.length?`<div class="row-btns">${acciones.join("")}</div>`:""}
+  </article>`;
+}
+
+// ── Formulario de solicitud ──
+function solFormulario(s){
+  const nuevo=!s;
+  const esp=(solEspaciosCache.items||[]).map(e=>
+    `<option value="${esc(e.id)}"${s&&s.espacio_id===e.id?" selected":""}>${esc(e.nombre)}${e.capacidad?` (hasta ${e.capacidad})`:""}</option>`).join("");
+  if(!esp){
+    msg($("solMsg"),"Todavía no hay espacios cargados. Alguien de la biblioteca tiene que crearlos primero (botón “Espacios”).","error");
+    return;
+  }
+  const reps=(solDatos.repeticiones||[]).map(r=>
+    `<option value="${esc(r.id)}"${s&&s.repeticion===r.id?" selected":""}>${esc(r.titulo)}</option>`).join("");
+  const nec=NECESIDADES.map(n=>`<label class="chk"><input type="checkbox" value="${esc(n)}"
+    ${s&&(s.necesidades||[]).includes(n)?"checked":""}> ${esc(n)}</label>`).join("");
+  const extra=(s&&(s.necesidades||[]).filter(n=>!NECESIDADES.includes(n)).join(", "))||"";
+
+  $("solForm").innerHTML=`<div class="card" style="background:#fbfbfd;margin-bottom:1rem">
+    <h3 style="margin:0 0 .8rem;font-size:1rem;color:var(--navy)">${nuevo?"Solicitar un espacio":"Editar la solicitud"}</h3>
+    <div class="sol-grid">
+      <div class="ancho"><label for="sfTitulo">¿Qué actividad es?</label>
+        <input id="sfTitulo" value="${esc(s?s.titulo:"")}" placeholder="ej: Taller de radio para adolescentes" /></div>
+      <div class="ancho"><label for="sfDesc">Contanos un poco más (opcional)</label>
+        <textarea id="sfDesc" rows="2">${esc(s?s.descripcion:"")}</textarea></div>
+      <div><label for="sfEspacio">Espacio</label><select id="sfEspacio">${esp}</select></div>
+      <div><label for="sfPersonas">¿Cuánta gente calculás?</label>
+        <input id="sfPersonas" type="number" min="0" value="${s&&s.personas?s.personas:""}" /></div>
+      <div><label for="sfInicio">Desde</label>
+        <input id="sfInicio" type="datetime-local" value="${esc(s?s.inicio:"")}" /></div>
+      <div><label for="sfFin">Hasta</label>
+        <input id="sfFin" type="datetime-local" value="${esc(s?s.fin:"")}" /></div>
+      <div><label for="sfRep">¿Se repite?</label><select id="sfRep">${reps}</select></div>
+      <div id="sfHastaBox" class="hide"><label for="sfHasta">¿Hasta qué día se repite?</label>
+        <input id="sfHasta" type="date" value="${esc(s&&s.hasta?s.hasta:"")}" /></div>
+      <div class="ancho"><label>¿Necesitás algo?</label>
+        <div class="chk-fila">${nec}</div>
+        <input id="sfNecOtro" placeholder="Otra cosa (separá con comas)" value="${esc(extra)}" /></div>
+      <div class="ancho"><div class="chk-fila">
+        <label class="chk"><input type="checkbox" id="sfPublica" ${s&&s.abierta_publico?"checked":""}> Abierta al público</label>
+        <label class="chk"><input type="checkbox" id="sfArancel" ${s&&s.arancelada?"checked":""}> Es arancelada</label>
+      </div></div>
+    </div>
+    <div id="sfConflictos"></div>
+    <div class="row-btns">
+      <button class="btn-sec" id="sfCancelar">Cancelar</button>
+      <button class="primary" style="width:auto;margin:0" id="sfGuardar">${nuevo?"Enviar solicitud":"Guardar cambios"}</button>
+    </div></div>`;
+  show($("solForm"),true);
+  $("solForm").scrollIntoView({behavior:"smooth", block:"nearest"});
+
+  const verHasta=()=>show($("sfHastaBox"), $("sfRep").value!=="unica");
+  verHasta();
+  $("sfRep").onchange=()=>{ verHasta(); chequearConflictos(s&&s.id); };
+  ["sfEspacio","sfInicio","sfFin","sfHasta"].forEach(id=>
+    $(id).addEventListener("change",()=>chequearConflictos(s&&s.id)));
+  $("sfCancelar").onclick=()=>show($("solForm"),false);
+  $("sfGuardar").onclick=(e)=>solGuardar(s, e.currentTarget);
+}
+
+function solLeerFormulario(){
+  const marcadas=[...$("solForm").querySelectorAll(".chk-fila input[type=checkbox][value]")]
+    .filter(c=>c.checked).map(c=>c.value);
+  const otras=$("sfNecOtro").value.split(",").map(x=>x.trim()).filter(Boolean);
+  return {
+    titulo:$("sfTitulo").value.trim(), descripcion:$("sfDesc").value.trim(),
+    espacio_id:$("sfEspacio").value, inicio:$("sfInicio").value, fin:$("sfFin").value,
+    repeticion:$("sfRep").value, hasta:$("sfRep").value==="unica"?null:$("sfHasta").value,
+    personas:$("sfPersonas").value||0, necesidades:[...marcadas,...otras],
+    abierta_publico:$("sfPublica").checked, arancelada:$("sfArancel").checked,
+  };
+}
+
+// Avisa (no bloquea) si el horario pedido se pisa con algo ya aprobado.
+async function chequearConflictos(excluir_id){
+  const caja=$("sfConflictos"); if(!caja) return;
+  const d=solLeerFormulario();
+  if(!d.espacio_id || !d.inicio || !d.fin){ caja.innerHTML=""; return; }
+  try{
+    const r=await api("/api/solicitudes/conflictos",{method:"POST",body:JSON.stringify({
+      espacio_id:d.espacio_id, inicio:d.inicio, fin:d.fin,
+      repeticion:d.repeticion, hasta:d.hasta, excluir_id})});
+    if(!r.conflictos.length){
+      caja.innerHTML = r.fechas.length>1
+        ? `<div class="msg ok">Son ${r.fechas.length} fechas y el espacio está libre en todas.</div>`
+        : `<div class="msg ok">El espacio está libre en ese horario.</div>`;
+      return;
+    }
+    caja.innerHTML=`<div class="msg" style="background:#fff4e0;color:#8a5a00;border:1px solid #f0d5a0">
+      <b>Ojo, se pisa con ${r.conflictos.length===1?"otra reserva":"otras reservas"}:</b>
+      <ul style="margin:.4rem 0 0;padding-left:1.1rem">${r.conflictos.slice(0,5).map(c=>
+        `<li>${esc(c.titulo)} — ${esc(fechaHumana(c.inicio))} a ${esc(soloHora(c.fin))}${c.solicitante?` (${esc(c.solicitante)})`:""}</li>`).join("")}</ul>
+      <span class="meta">Podés mandarla igual: quien resuelve verá el cruce y decidirá.</span></div>`;
+  } catch(err){
+    // Un error de validación acá es normal mientras se completa el formulario.
+    caja.innerHTML = `<div class="meta">${esc(err.message)}</div>`;
+  }
+}
+
+async function solGuardar(s, btn){
+  const restore=btnBusy(btn, s?"Guardando…":"Enviando…");
+  try{
+    const cuerpo=solLeerFormulario();
+    if(s) await api("/api/solicitudes/"+s.id,{method:"PUT",body:JSON.stringify(cuerpo)});
+    else  await api("/api/solicitudes",{method:"POST",body:JSON.stringify(cuerpo)});
+    show($("solForm"),false);
+    await loadSolicitudes();          // primero recarga (limpia el panel)…
+    msg($("solMsg"), s?"Listo: la solicitud quedó actualizada."
+        :"Listo: tu solicitud quedó enviada. Te van a avisar cuando la resuelvan.","ok");
+  } catch(err){ msg($("solMsg"),err.message,"error"); }
+  finally { restore(); }
+}
+
+// ── Resolver: aprobar (pudiendo mover), rechazar o pedir cambios ──
+function solResolverModal(s){
+  const esp=(solEspaciosCache.items||[]).map(e=>
+    `<option value="${esc(e.id)}"${s.espacio_id===e.id?" selected":""}>${esc(e.nombre)}</option>`).join("");
+  const bg=document.createElement("div"); bg.className="modal-bg";
+  bg.innerHTML=`<div class="modal"><h3>Resolver: ${esc(s.titulo)}</h3>
+    <p class="meta" style="margin:0 0 .8rem">Pidió ${esc((s.solicitante||{}).nombre||"")}
+      ${(s.solicitante||{}).subcomision?`· ${esc(s.solicitante.subcomision)}`:""}</p>
+    <div id="rvMsg"></div>
+    <p style="margin:.2rem 0 .6rem;line-height:1.5">Podés <b>ajustar la fecha, el horario o el
+      espacio</b> antes de aprobar. Lo que cambies queda a la vista de quien lo pidió.</p>
+    <div class="sol-grid">
+      <div><label for="rvEspacio">Espacio</label><select id="rvEspacio">${esp}</select></div>
+      <div></div>
+      <div><label for="rvInicio">Desde</label>
+        <input id="rvInicio" type="datetime-local" value="${esc(s.inicio)}" /></div>
+      <div><label for="rvFin">Hasta</label>
+        <input id="rvFin" type="datetime-local" value="${esc(s.fin)}" /></div>
+    </div>
+    <div id="rvAviso"></div>
+    <label for="rvMotivo">Motivo o comentario
+      <span class="meta">(obligatorio para rechazar o pedir cambios)</span></label>
+    <textarea id="rvMotivo" rows="2"></textarea>
+    <div class="row-btns" style="flex-wrap:wrap">
+      <button class="btn-sec" id="rvNo">Cerrar</button>
+      <button class="btn-sec" id="rvObs">Pedir cambios</button>
+      <button class="btn-sec danger" id="rvRech">Rechazar</button>
+      <button class="primary" style="width:auto;margin:0" id="rvOk">Aprobar</button>
+    </div></div>`;
+  document.body.appendChild(bg);
+  const cerrar=()=>bg.remove();
+  bg.querySelector("#rvNo").onclick=cerrar;
+  bg.onclick=e=>{ if(e.target===bg) cerrar(); };
+
+  // Mover la fecha de algo que se repite cambia cuántas veces entra antes del tope:
+  // pasar el arranque del martes al miércoles puede dejar afuera la última. Se avisa,
+  // y de paso se marca si el horario nuevo choca con otra reserva.
+  const repetida = (s.fechas||[]).length>1;
+  const revisar=async ()=>{
+    const caja=bg.querySelector("#rvAviso");
+    try{
+      const r=await api("/api/solicitudes/conflictos",{method:"POST",body:JSON.stringify({
+        espacio_id:bg.querySelector("#rvEspacio").value,
+        inicio:bg.querySelector("#rvInicio").value, fin:bg.querySelector("#rvFin").value,
+        repeticion:s.repeticion, hasta:s.hasta, excluir_id:s.id})});
+      const partes=[];
+      if(repetida && r.fechas.length!==s.fechas.length)
+        partes.push(`<b>Ojo:</b> con este cambio quedan <b>${r.fechas.length} fechas</b> en vez de ${s.fechas.length} (el “hasta” sigue siendo ${esc(s.hasta||"")}).`);
+      if(r.conflictos.length)
+        partes.push(`<b>Se pisa con:</b> ${r.conflictos.slice(0,3).map(c=>esc(c.titulo)+" ("+esc(fechaHumana(c.inicio))+")").join(", ")}.`);
+      caja.innerHTML = partes.length
+        ? `<div class="msg" style="background:#fff4e0;color:#8a5a00;border:1px solid #f0d5a0">${partes.join("<br>")}</div>`
+        : "";
+    } catch(err){ caja.innerHTML=`<div class="meta">${esc(err.message)}</div>`; }
+  };
+  ["rvEspacio","rvInicio","rvFin"].forEach(id=>
+    bg.querySelector("#"+id).addEventListener("change", revisar));
+
+  const resolver=async (decision, btn)=>{
+    const restore=btnBusy(btn,"Guardando…");
+    const cambios = decision==="aprobar" ? {
+      espacio_id:bg.querySelector("#rvEspacio").value,
+      inicio:bg.querySelector("#rvInicio").value,
+      fin:bg.querySelector("#rvFin").value } : null;
+    try{
+      await api(`/api/solicitudes/${s.id}/resolver`,{method:"POST",body:JSON.stringify({
+        decision, motivo:bg.querySelector("#rvMotivo").value, cambios})});
+      cerrar();
+      await loadSolicitudes();        // …y recién después el aviso, si no se pisa
+      msg($("solMsg"),{aprobar:"Aprobada. Ya aparece en el calendario.",
+                       rechazar:"Rechazada.",observar:"Devuelta con observaciones."}[decision],"ok");
+    } catch(err){ msg(bg.querySelector("#rvMsg"),err.message,"error"); }
+    finally { restore(); }
+  };
+  bg.querySelector("#rvOk").onclick   = e=>resolver("aprobar", e.currentTarget);
+  bg.querySelector("#rvRech").onclick = e=>resolver("rechazar", e.currentTarget);
+  bg.querySelector("#rvObs").onclick  = e=>resolver("observar", e.currentTarget);
+}
+
+// ── Acciones de las tarjetas (delegado: se redibujan) ──
+document.addEventListener("click", async (e)=>{
+  const b=e.target.closest("[data-sol]"); if(!b) return;
+  const s=(solDatos.items||[]).find(x=>x.id===b.dataset.id); if(!s) return;
+  if(b.dataset.sol==="resolver") return solResolverModal(s);
+  if(b.dataset.sol==="editar")   return solFormulario(s);
+  if(b.dataset.sol==="cancelar"){
+    if(!await uiConfirm({title:"Cancelar la reserva", danger:true, ok:"Cancelar la reserva",
+        message:`Se da de baja <b>${esc(s.titulo)}</b>`+
+                (s.estado==="aprobada"?" y sale del calendario.":".")})) return;
+    try{
+      await api(`/api/solicitudes/${s.id}/cancelar`,{method:"POST",body:"{}"});
+      await loadSolicitudes();
+    } catch(err){ msg($("solMsg"),err.message,"error"); }
+  }
+});
+
+$("solNueva").addEventListener("click", ()=>solFormulario(null));
+$("solRef").addEventListener("click", loadSolicitudes);
+document.querySelectorAll("#solFiltro button").forEach(b=>b.addEventListener("click",()=>{
+  solEstadoFiltro=b.dataset.estado;
+  document.querySelectorAll("#solFiltro button").forEach(x=>x.classList.toggle("active",x===b));
+  loadSolicitudes();
+}));
+
+// ── Administrar espacios ──
+$("solEspacios").addEventListener("click", ()=>{
+  const bg=document.createElement("div"); bg.className="modal-bg";
+  const dibujar=()=>{
+    const filas=(solEspaciosCache.items||[]).map(e=>`<tr>
+      <td><b>${esc(e.nombre)}</b>${e.de_ejemplo?' <span class="badge gray">de ejemplo</span>':""}
+        ${e.notas?`<br><span class="meta">${esc(e.notas)}</span>`:""}</td>
+      <td>${e.capacidad?esc(e.capacidad)+" pers.":"—"}</td>
+      <td class="usr-acc"><button class="btn-sec danger" data-borrar="${e.id}">Borrar</button></td>
+    </tr>`).join("");
+    bg.querySelector("#epLista").innerHTML = filas
+      ? `<div class="tbl-scroll"><table><tbody>${filas}</tbody></table></div>`
+      : '<p class="empty">Todavía no hay espacios.</p>';
+    bg.querySelectorAll("[data-borrar]").forEach(b=>b.onclick=async ()=>{
+      if(!await uiConfirm({title:"Borrar espacio", danger:true, ok:"Borrar",
+          message:"Si ya tiene reservas hechas, conviene dejarlo y no borrarlo."})) return;
+      try{ await api("/api/espacios/"+b.dataset.borrar,{method:"DELETE"});
+           solEspaciosCache=await api("/api/espacios"); dibujar(); }
+      catch(err){ msg(bg.querySelector("#epMsg"),err.message,"error"); }
+    });
+  };
+  bg.innerHTML=`<div class="modal"><h3>Espacios de la biblioteca</h3>
+    <p class="meta" style="margin:0 0 .9rem">Los que se pueden reservar. Si ves nombres
+      marcados “de ejemplo”, son los que puso la app para arrancar: borralos y cargá los reales.</p>
+    <div id="epMsg"></div><div id="epLista"></div>
+    <div class="sol-grid" style="margin-top:1rem">
+      <div><label for="epNombre">Nombre</label><input id="epNombre" placeholder="ej: Sala infantil" /></div>
+      <div><label for="epCap">Capacidad (opcional)</label><input id="epCap" type="number" min="0" /></div>
+    </div>
+    <div class="row-btns"><button class="btn-sec" id="epNo">Cerrar</button>
+      <button class="primary" style="width:auto;margin:0" id="epAdd">Agregar espacio</button></div></div>`;
+  document.body.appendChild(bg);
+  dibujar();
+  const cerrar=()=>{ bg.remove(); loadSolicitudes(); };
+  bg.querySelector("#epNo").onclick=cerrar;
+  bg.onclick=e=>{ if(e.target===bg) cerrar(); };
+  bg.querySelector("#epAdd").onclick=async (ev)=>{
+    const restore=btnBusy(ev.currentTarget,"Agregando…");
+    try{
+      await api("/api/espacios",{method:"POST",body:JSON.stringify({
+        nombre:bg.querySelector("#epNombre").value,
+        capacidad:bg.querySelector("#epCap").value||0})});
+      bg.querySelector("#epNombre").value=""; bg.querySelector("#epCap").value="";
+      msg(bg.querySelector("#epMsg"),"","");
+      solEspaciosCache=await api("/api/espacios"); dibujar();
+    } catch(err){ msg(bg.querySelector("#epMsg"),err.message,"error"); }
+    finally { restore(); }
+  };
+});
+
 
 if (token) enterApp();
 </script>
