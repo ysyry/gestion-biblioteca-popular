@@ -686,6 +686,44 @@
       <!-- Cruce de datos (debajo del buscador, en la pestaña Socios) -->
       <div id="cruceSection" class="hide"></div>
 
+      <!-- Registro de actividades realizadas (lo que llega por el link público) -->
+      <div id="registroView" class="hide">
+        <div class="card">
+          <div class="hist-toolbar">
+            <div class="subtabs" id="regTabs">
+              <button data-vista="bandeja" class="active">Registros</button>
+              <button data-vista="links">Links para compartir</button>
+            </div>
+            <button class="primary" style="width:auto;margin:0" id="regNuevo">+ Cargar actividad</button>
+            <button class="btn-sec" id="regExport">Exportar CSV</button>
+            <button class="btn-refresh" id="regRef">↻</button>
+          </div>
+          <div id="regMsg"></div>
+          <div id="regForm" class="hide"></div>
+
+          <div id="regBandeja">
+            <div class="subtabs" id="regEstado">
+              <button data-estado="recibido" class="active">Recibidos</button>
+              <button data-estado="validado">Validados</button>
+              <button data-estado="">Todos</button>
+            </div>
+            <div id="regAtencion"></div>
+            <div id="regLista">Cargando…</div>
+          </div>
+
+          <div id="regLinks" class="hide">
+            <p class="meta" style="margin:0 0 1rem">
+              El <b>link general</b> sirve para cualquier actividad suelta. El de una
+              <b>actividad</b> viene precargado y se cierra solo al recibirse. El de un
+              <b>taller</b> se comparte una vez y sirve todos los meses.
+            </p>
+            <button class="btn-sec" id="regLinkNuevo">+ Nuevo link</button>
+            <div id="regLinkForm" class="hide"></div>
+            <div id="regLinkLista" style="margin-top:1rem">Cargando…</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Pizarrón semanal de las bibliotecarias -->
       <div id="pizarronView" class="hide">
         <div class="card">
@@ -850,7 +888,7 @@ let currentTab = "active";
 // Perfil de quien está adentro (rol, permisos y secciones). Lo trae /api/me.
 let ME = null;
 const puede = (p)=> !!(ME && ME.permisos && ME.permisos.includes(p));
-const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", pizarron:"Pizarrón de la semana", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
+const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", pizarron:"Pizarrón de la semana", registro:"Actividades realizadas", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
 let loanSub = "todos";
 let loansAll = null;  // cache de loans_contact mientras se está en la pestaña Préstamos
 
@@ -1031,7 +1069,8 @@ function selectTab(tab){
   show($("solicitudesView"), tab==="solicitudes");
   show($("notasView"), tab==="notas");
   show($("pizarronView"), tab==="pizarron");
-  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas","pizarron"].includes(tab));
+  show($("registroView"), tab==="registro");
+  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas","pizarron","registro"].includes(tab));
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
   show($("cruceSection"), tab==="members");
@@ -1047,6 +1086,7 @@ function selectTab(tab){
   else if (tab==="members") { $("tableWrap").innerHTML = '<p class="empty">Buscá un socio por apellido, nombre o carnet.</p>'; loadCruce(); }
   else if (tab==="notas") { loadNotas(); }
   else if (tab==="pizarron") { cerrarPizForm(); $("pizQ").value=""; PIZ.q=""; loadPizarron(null); }
+  else if (tab==="registro") { loadRegistro(); }
   else if (tab==="mails") { renderRecipients(); updatePreview();
     ensureCuotaMap().then(()=>{ updatePreview(); });
     refrescarAvisos().then(()=>{ if(currentTab==="mails") renderRecipients(); }); }
@@ -1199,6 +1239,352 @@ function renderFicha(d, volver){
     </div>
   `;
 }
+
+// ── Registro de actividades ───────────────────────────────────────────
+// Lo que llega del formulario público queda "recibido" hasta que alguien lo valida:
+// solo lo validado cuenta después. Ver app/registro.py y static/registro.html.
+const REG = { estado:"recibido", items:[], cat:null, links:[], vista:"bandeja", editando:null };
+
+function regBadge(estado){
+  const cls={recibido:"nota-novedad", validado:"green", descartado:"gray"}[estado]||"gray";
+  return `<span class="badge ${cls}">${esc({recibido:"Recibido",validado:"Validado",descartado:"Descartado"}[estado]||estado)}</span>`;
+}
+async function loadRegistro(){
+  const lista=$("regLista"); lista.innerHTML=LOADER_SM; msg($("regMsg"),"","");
+  try {
+    const d=await api("/api/registro"+(REG.estado?`?estado=${REG.estado}`:""));
+    REG.items=d.items; REG.cat=d.catalogos;
+    document.querySelector('#regEstado button[data-estado="recibido"]').textContent =
+      d.pendientes ? `Recibidos (${d.pendientes})` : "Recibidos";
+    $("regAtencion").innerHTML = d.atencion.length
+      ? `<div class="msg" style="background:#fff4e0;color:#8a5a00;border:1px solid #f0d5a0">
+          <b>⚠️ ${d.atencion.length} actividad(es) reportaron un problema que necesita atención:</b>
+          ${d.atencion.map(r=>`<br>· ${esc(r.datos.titulo)} — ${esc(r.datos.incidente.texto)}`).join("")}</div>`
+      : "";
+    lista.innerHTML = d.items.length ? d.items.map(tarjetaRegistro).join("")
+      : `<p class="empty">${REG.estado==="recibido" ? "No hay registros esperando revisión." : "Todavía no hay registros."}</p>`;
+  } catch(err){ lista.innerHTML=""; msg($("regMsg"),esc(err.message),"error"); }
+}
+function tarjetaRegistro(r){
+  const d=r.datos, taller=r.clase==="taller";
+  const cuando = taller ? `Mes de ${esc(d.mes)}` : `${fechaAR(d.fecha)}${d.hora_inicio?` · ${esc(d.hora_inicio)}${d.hora_fin?"–"+esc(d.hora_fin):""}`:""}`;
+  const gente = taller
+    ? `${d.participantes} participante(s) · ${d.encuentros} encuentro(s)${d.suspendidos?` · ${d.suspendidos} suspendido(s)`:""}`
+    : `${d.personas_total} persona(s)${d.personas_aprox?" (aprox.)":""}`;
+  const chips=[r.tipo_etiqueta, ...(r.tematicas_etiquetas||[])].filter(Boolean)
+    .map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const dup = (r.posibles_duplicados||[]).length
+    ? '<span class="badge red" title="Ya hay otro registro parecido">⚠️ Posible duplicado</span>' : "";
+  const inc = (d.incidente||{}).texto
+    ? `<div class="sol-motivo">${d.incidente.requiere_atencion?"⚠️ ":""}${esc(d.incidente.texto)}</div>` : "";
+  const acciones = r.estado==="recibido"
+    ? `<button class="btn-sec" data-reg-validar="${esc(r.id)}">✓ Validar</button>
+       <button class="btn-sec" data-reg-editar="${esc(r.id)}">Corregir</button>
+       <button class="btn-sec danger" data-reg-descartar="${esc(r.id)}">Descartar</button>`
+    : `<button class="btn-sec" data-reg-editar="${esc(r.id)}">Corregir</button>
+       <button class="btn-sec danger" data-reg-borrar="${esc(r.id)}">Borrar</button>`;
+  return `<div class="sol-card estado-${r.estado==="validado"?"aprobada":r.estado==="descartado"?"cancelada":"pendiente"}">
+    <div class="sol-head">
+      <div><b>${esc(d.titulo)}</b>${regBadge(r.estado)} ${dup}
+        <div class="sol-cuando">${cuando} · ${esc(r.espacio_nombre||"sin espacio")} · ${gente}</div></div>
+      <div class="meta" style="margin:0;text-align:right">
+        ${taller?"Resumen mensual":"Actividad"}<br>${esc((d.quien_completa||{}).nombre||r.cargado_por||"")}</div>
+    </div>
+    ${chips?`<div class="sol-nec">${chips}</div>`:""}
+    ${d.descripcion||d.trabajado ? `<p class="sol-desc">${esc(d.descripcion||d.trabajado)}</p>`:""}
+    ${d.valoracion?`<div class="meta" style="margin:.35rem 0 0">Valoración: ${"★".repeat(d.valoracion)}${"☆".repeat(5-d.valoracion)}</div>`:""}
+    ${inc}
+    ${r.estado==="descartado"&&r.motivo?`<div class="sol-motivo">Descartado: ${esc(r.motivo)}</div>`:""}
+    ${(r.historial||[]).some(h=>h.cambios)?`<div class="meta" style="margin:.35rem 0 0">Corregido por la biblioteca.</div>`:""}
+    <div class="row-btns" style="justify-content:flex-start">${acciones}</div>
+  </div>`;
+}
+
+// Formulario de carga y corrección (mismos campos que el formulario público).
+function regCampo(campo, etiqueta, valor, {tipo="text", ancho=false}={}){
+  return `<div class="${ancho?"ancho":""}"><label>${esc(etiqueta)}</label>
+    <input data-reg="${campo}" type="${tipo}" value="${esc(valor??"")}" ${tipo==="number"?'min="0"':""} /></div>`;
+}
+function regSelect(campo, etiqueta, opciones, valor, vacio){
+  return `<div><label>${esc(etiqueta)}</label><select data-reg="${campo}">${vacio?`<option value="">${esc(vacio)}</option>`:""}
+    ${Object.entries(opciones).map(([k,v])=>`<option value="${esc(k)}"${valor===k?" selected":""}>${esc(v)}</option>`).join("")}</select></div>`;
+}
+function regArea(campo, etiqueta, valor){
+  return `<div class="ancho"><label>${esc(etiqueta)}</label>
+    <textarea data-reg="${campo}" rows="2">${esc(valor??"")}</textarea></div>`;
+}
+function regEdades(franjas){
+  const f=franjas||{};
+  return `<div class="ancho"><label>Personas por edad (opcional)</label><div class="chk-fila">
+    ${Object.entries(REG.cat.franjas).map(([k,v])=>
+      `<label class="chk" style="flex-direction:column;align-items:flex-start;gap:.15rem">
+        <span class="meta" style="margin:0">${esc(v)}</span>
+        <input data-reg-franja="${esc(k)}" type="number" min="0" style="width:5.5rem" value="${esc(f[k]??"")}" /></label>`).join("")}
+  </div></div>`;
+}
+function regFormulario(r){
+  REG.editando = r ? r.id : null;
+  // Al corregir manda la clase del registro; al cargar, la pestaña elegida.
+  const clase = r ? r.clase : (REG.clase || "actividad");
+  const d = r ? r.datos : {};
+  const c = REG.cat, esp = Object.fromEntries((c.espacios||[]).map(e=>[e.id,e.nombre]));
+  const comun = `
+    ${regArea("mejorar","¿Qué mejorar o qué hizo falta?", d.mejorar)}
+    ${regArea("incidente","Problema o incidente", (d.incidente||{}).texto)}
+    <div class="ancho"><label class="chk"><input type="checkbox" data-reg="incidente_atencion"
+      ${(d.incidente||{}).requiere_atencion?"checked":""} /> Requiere atención</label></div>
+    ${regCampo("valoracion","Valoración (1 a 5)", d.valoracion, {tipo:"number"})}
+    ${regCampo("nombre_completa","¿Quién lo informó?", (d.quien_completa||{}).nombre || ME.nombre || ME.username)}`;
+  const campos = clase==="taller" ? `
+    ${regCampo("titulo","Taller", d.titulo, {ancho:true})}
+    ${regCampo("mes","Mes (AAAA-MM)", d.mes, {tipo:"month"})}
+    ${regCampo("tallerista","Tallerista", d.tallerista)}
+    ${regCampo("encuentros","Encuentros realizados", d.encuentros, {tipo:"number"})}
+    ${regCampo("suspendidos","Suspendidos", d.suspendidos, {tipo:"number"})}
+    ${regSelect("motivo_suspension","Motivo", c.suspension, d.motivo_suspension, "—")}
+    ${regCampo("participantes","Participantes del mes", d.participantes, {tipo:"number"})}
+    ${regCampo("asistencia_promedio","Asistencia promedio", d.asistencia_promedio, {tipo:"number"})}
+    ${regCampo("altas","Altas", d.altas, {tipo:"number"})}
+    ${regCampo("bajas","Bajas", d.bajas, {tipo:"number"})}
+    ${regSelect("espacio_id","Espacio", esp, d.espacio_id, "Otro lugar")}
+    ${regEdades(d.franjas)}
+    ${regArea("trabajado","¿Qué se trabajó?", d.trabajado)}
+    ${comun}` : `
+    ${regCampo("titulo","Nombre de la actividad", d.titulo, {ancho:true})}
+    ${regSelect("tipo","Tipo", c.tipos, d.tipo, "Elegí…")}
+    ${regCampo("fecha","Fecha", d.fecha, {tipo:"date"})}
+    ${regCampo("hora_inicio","Desde", d.hora_inicio, {tipo:"time"})}
+    ${regCampo("hora_fin","Hasta", d.hora_fin, {tipo:"time"})}
+    ${regSelect("espacio_id","Espacio", esp, d.espacio_id, "Otro lugar / virtual")}
+    ${regCampo("espacio_otro","Si fue en otro lado, ¿dónde?", d.espacio_otro)}
+    ${regSelect("modalidad","Modalidad", c.modalidades, d.modalidad)}
+    ${regCampo("a_cargo","A cargo de", d.a_cargo, {ancho:true})}
+    ${regSelect("organiza","Organiza", c.organiza, d.organiza)}
+    ${regCampo("organiza_detalle","Subcomisión o institución", d.organiza_detalle)}
+    ${regCampo("personas_total","Cuántas personas vinieron", d.personas_total, {tipo:"number"})}
+    ${regCampo("primera_vez","Por primera vez", d.primera_vez, {tipo:"number"})}
+    ${regSelect("acceso","Acceso", c.accesos, d.acceso)}
+    ${regEdades(d.franjas)}
+    ${regArea("descripcion","¿De qué se trató?", d.descripcion)}
+    ${comun}
+    ${regSelect("continua","¿Continúa o se repetiría?", c.continua, d.continua, "—")}`;
+  const tem = d.tematicas||[];
+  $("regForm").innerHTML = `<div class="card" style="background:#fbfbfd">
+    <h3 style="margin:0 0 .6rem;color:var(--navy)">${r?"Corregir registro":"Cargar una actividad"}</h3>
+    ${r?"":`<div class="subtabs" id="regClase">
+      <button data-clase="actividad"${clase==="actividad"?' class="active"':""}>Actividad única</button>
+      <button data-clase="taller"${clase==="taller"?' class="active"':""}>Resumen mensual de taller</button></div>`}
+    <div class="sol-grid">${campos}
+      <div class="ancho"><label>Temáticas (hasta 3)</label><div class="sol-nec" id="regTem">
+        ${Object.entries(c.tematicas).map(([k,v])=>
+          `<button type="button" class="chip-tem tag${tem.includes(k)?" on":""}" data-tem="${esc(k)}"
+            style="cursor:pointer;border:1px solid transparent">${esc(v)}</button>`).join("")}</div></div>
+    </div>
+    <div class="row-btns"><button class="btn-sec" id="regCancelar">Cancelar</button>
+      <button class="primary" style="width:auto;margin:0" id="regGuardar">Guardar</button></div>
+  </div>`;
+  show($("regForm"),true);
+  REG.clase=clase; REG.tem=[...tem];
+  const tabs=$("regClase");
+  if(tabs) tabs.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    REG.clase=b.dataset.clase; regFormulario(null); }));
+  $("regTem").querySelectorAll("[data-tem]").forEach(b=>b.addEventListener("click",()=>{
+    const k=b.dataset.tem, i=REG.tem.indexOf(k);
+    if(i>=0) REG.tem.splice(i,1); else if(REG.tem.length<3) REG.tem.push(k);
+    b.classList.toggle("on", REG.tem.includes(k));
+    b.style.background = REG.tem.includes(k) ? "var(--magenta)" : "";
+    b.style.color = REG.tem.includes(k) ? "#fff" : "";
+  }));
+  $("regTem").querySelectorAll(".on").forEach(b=>{ b.style.background="var(--magenta)"; b.style.color="#fff"; });
+  $("regCancelar").onclick=()=>{ show($("regForm"),false); $("regForm").innerHTML=""; REG.editando=null; };
+  $("regGuardar").onclick=()=>regGuardar(r);
+  $("regForm").scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+function regLeerFormulario(){
+  const datos={franjas:{}, tematicas:REG.tem};
+  $("regForm").querySelectorAll("[data-reg]").forEach(el=>{
+    datos[el.dataset.reg] = el.type==="checkbox" ? el.checked : el.value;
+  });
+  $("regForm").querySelectorAll("[data-reg-franja]").forEach(el=>{
+    if(el.value && Number(el.value)>0) datos.franjas[el.dataset.regFranja]=Number(el.value);
+  });
+  datos.quien_completa={nombre:datos.nombre_completa||"", contacto:""};
+  delete datos.nombre_completa;
+  return datos;
+}
+async function regGuardar(r){
+  const restore=btnBusy($("regGuardar"),"Guardando…");
+  try {
+    const datos=regLeerFormulario();
+    if(r) await api(`/api/registro/${encodeURIComponent(r.id)}`,{method:"PUT", body:JSON.stringify({datos})});
+    else await api("/api/registro",{method:"POST", body:JSON.stringify({clase:REG.clase, datos})});
+    show($("regForm"),false); $("regForm").innerHTML=""; REG.editando=null;
+    await loadRegistro();
+  } catch(err){ restore(); msg($("regMsg"),esc(err.message),"error"); }
+}
+
+// ── Links para compartir ──
+async function loadRegLinks(){
+  const el=$("regLinkLista"); el.innerHTML=LOADER_SM;
+  try {
+    const d=await api("/api/registro/links");
+    REG.links=d.items; REG.cat=d.catalogos;
+    const aviso = d.publico_configurado ? "" :
+      `<div class="msg" style="background:#fff4e0;color:#8a5a00;border:1px solid #f0d5a0">
+        Falta configurar <b>APP_PUBLIC_URL</b>: los links se arman sin la dirección del sitio y no se pueden compartir.</div>`;
+    el.innerHTML = aviso + (d.items.length ? d.items.map(tarjetaLink).join("")
+      : '<p class="empty">Todavía no hay links. Creá uno y compartilo por WhatsApp.</p>');
+  } catch(err){ el.innerHTML=""; msg($("regMsg"),esc(err.message),"error"); }
+}
+function tarjetaLink(l){
+  const estado = !l.abierto ? '<span class="badge gray">Cerrado</span>'
+    : l.vencido ? '<span class="badge red">Vencido</span>' : '<span class="badge green">Abierto</span>';
+  const clase = {general:"General", actividad:"De una actividad", taller:"De un taller"}[l.clase]||l.clase;
+  return `<div class="sol-card">
+    <div class="sol-head"><div><b>${esc(l.titulo)}</b>${estado}
+      <div class="sol-cuando">${esc(clase)} · usado ${l.usos||0} vez(ces)${l.ultimo_uso?` · última: ${fechaHora(l.ultimo_uso)}`:""}${l.vence?` · vence ${fechaAR(l.vence)}`:""}</div></div></div>
+    <div class="meta" style="word-break:break-all;margin:.4rem 0 0">${esc(l.url)}</div>
+    <div class="row-btns" style="justify-content:flex-start">
+      <button class="btn-sec" data-link-copiar="${esc(l.url)}">Copiar link</button>
+      <a class="btn-sec" style="text-decoration:none" target="_blank" rel="noopener"
+         href="https://wa.me/?text=${encodeURIComponent(l.titulo+": "+l.url)}">Enviar por WhatsApp</a>
+      <button class="btn-sec" data-link-estado="${esc(l.id)}" data-abierto="${l.abierto?1:0}">${l.abierto?"Cerrar":"Reabrir"}</button>
+      <button class="btn-sec danger" data-link-borrar="${esc(l.id)}">Borrar</button>
+    </div></div>`;
+}
+async function regLinkFormulario(){
+  const c=REG.cat, esp=Object.fromEntries((c.espacios||[]).map(e=>[e.id,e.nombre]));
+  let reservas=[];
+  try { reservas=(await api("/api/solicitudes?estado=aprobada")).items||[]; } catch(_){}
+  $("regLinkForm").innerHTML = `<div class="card" style="background:#fbfbfd;margin-top:1rem">
+    <div class="sol-grid">
+      <div><label>Clase de link</label><select id="lkClase">
+        <option value="general">General (cualquier actividad)</option>
+        <option value="actividad">De una actividad puntual</option>
+        <option value="taller">De un taller (resumen mensual)</option></select></div>
+      <div><label>Nombre (para reconocerlo)</label><input id="lkTitulo" placeholder="Ej.: Charla de huerta · 10/09" /></div>
+      ${reservas.length?`<div class="ancho"><label>Traer los datos de una reserva aprobada</label>
+        <select id="lkReserva"><option value="">—</option>${reservas.map((s,i)=>
+          `<option value="${i}">${esc(s.titulo)} · ${fechaAR((s.inicio||"").slice(0,10))} · ${esc(s.espacio||"")}</option>`).join("")}</select></div>`:""}
+      <div><label>Fecha de la actividad</label><input id="lkFecha" type="date" /></div>
+      <div><label>Desde</label><input id="lkInicio" type="time" /></div>
+      <div><label>Hasta</label><input id="lkFin" type="time" /></div>
+      <div><label>Espacio</label><select id="lkEspacio"><option value="">—</option>${
+        Object.entries(esp).map(([k,v])=>`<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select></div>
+      <div><label>Tipo de actividad</label><select id="lkTipo"><option value="">—</option>${
+        Object.entries(c.tipos).map(([k,v])=>`<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select></div>
+      <div><label>Vence (opcional)</label><input id="lkVence" type="date" /></div>
+    </div>
+    <div class="row-btns"><button class="btn-sec" id="lkCancelar">Cancelar</button>
+      <button class="primary" style="width:auto;margin:0" id="lkGuardar">Crear link</button></div></div>`;
+  show($("regLinkForm"),true);
+  const res=$("lkReserva");
+  if(res) res.addEventListener("change",()=>{
+    const s=reservas[Number(res.value)]; if(!s) return;
+    $("lkTitulo").value=s.titulo||""; $("lkFecha").value=(s.inicio||"").slice(0,10);
+    $("lkInicio").value=(s.inicio||"").slice(11,16); $("lkFin").value=(s.fin||"").slice(11,16);
+    $("lkEspacio").value=s.espacio_id||""; $("lkClase").value="actividad";
+  });
+  $("lkCancelar").onclick=()=>{ show($("regLinkForm"),false); $("regLinkForm").innerHTML=""; };
+  $("lkGuardar").onclick=async ()=>{
+    const restore=btnBusy($("lkGuardar"),"Creando…");
+    try {
+      const clase=$("lkClase").value;
+      // El general no precarga nada: su nombre es para reconocerlo en la lista.
+      const precarga= clase==="general" ? {} : {titulo:$("lkTitulo").value.trim(), fecha:$("lkFecha").value||null,
+        hora_inicio:$("lkInicio").value||"", hora_fin:$("lkFin").value||"",
+        espacio_id:$("lkEspacio").value||"", tipo:$("lkTipo").value||""};
+      Object.keys(precarga).forEach(k=>{ if(!precarga[k]) delete precarga[k]; });
+      await api("/api/registro/links",{method:"POST", body:JSON.stringify({
+        clase, titulo:$("lkTitulo").value.trim(),
+        vence:$("lkVence").value||null, precarga})});
+      show($("regLinkForm"),false); $("regLinkForm").innerHTML="";
+      await loadRegLinks();
+    } catch(err){ restore(); msg($("regMsg"),esc(err.message),"error"); }
+  };
+}
+
+$("registroView").addEventListener("click", async e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  const ds=b.dataset;
+  try {
+    if(ds.regEditar){ regFormulario(REG.items.find(r=>r.id===ds.regEditar)); return; }
+    if(ds.linkCopiar){
+      try { await navigator.clipboard.writeText(ds.linkCopiar); msg($("regMsg"),"Link copiado.","ok"); }
+      catch(_){ msg($("regMsg"),"Copialo a mano: "+esc(ds.linkCopiar),"ok"); }
+      return;
+    }
+    if(ds.regValidar){
+      await api(`/api/registro/${encodeURIComponent(ds.regValidar)}/resolver`,
+                {method:"POST", body:JSON.stringify({estado:"validado"})});
+      await loadRegistro(); return;
+    }
+    if(ds.regDescartar){
+      const motivo=await pedirTexto("Descartar el registro","¿Por qué se descarta? (spam, duplicado, prueba…)");
+      if(!motivo) return;
+      await api(`/api/registro/${encodeURIComponent(ds.regDescartar)}/resolver`,
+                {method:"POST", body:JSON.stringify({estado:"descartado", motivo})});
+      await loadRegistro(); return;
+    }
+    if(ds.regBorrar){
+      if(!await uiConfirm({title:"Borrar registro", message:"Se borra del historial y no se puede deshacer.", ok:"Borrar", danger:true})) return;
+      await api(`/api/registro/${encodeURIComponent(ds.regBorrar)}`,{method:"DELETE"});
+      await loadRegistro(); return;
+    }
+    if(ds.linkEstado){
+      await api(`/api/registro/links/${encodeURIComponent(ds.linkEstado)}`,
+                {method:"PUT", body:JSON.stringify({abierto: ds.abierto!=="1"})});
+      await loadRegLinks(); return;
+    }
+    if(ds.linkBorrar){
+      if(!await uiConfirm({title:"Borrar link", message:"Quien lo tenga no va a poder cargar más.", ok:"Borrar", danger:true})) return;
+      await api(`/api/registro/links/${encodeURIComponent(ds.linkBorrar)}`,{method:"DELETE"});
+      await loadRegLinks(); return;
+    }
+  } catch(err){ msg($("regMsg"),esc(err.message),"error"); }
+});
+// Pregunta corta con ventana propia (para el motivo de descarte).
+function pedirTexto(titulo, mensaje){
+  return new Promise(resolve=>{
+    const bg=document.createElement("div"); bg.className="modal-bg";
+    bg.innerHTML=`<div class="modal"><h3>${esc(titulo)}</h3>
+      <label>${esc(mensaje)}</label><input id="ptValor" />
+      <div class="row-btns"><button class="btn-sec" id="ptNo">Cancelar</button>
+        <button class="primary" style="width:auto;margin:0" id="ptSi">Aceptar</button></div></div>`;
+    document.body.appendChild(bg);
+    const fin=v=>{ bg.remove(); resolve(v); };
+    bg.querySelector("#ptNo").onclick=()=>fin(null);
+    bg.querySelector("#ptSi").onclick=()=>fin(bg.querySelector("#ptValor").value.trim()||null);
+    bg.onclick=ev=>{ if(ev.target===bg) fin(null); };
+    bg.querySelector("#ptValor").focus();
+  });
+}
+document.querySelectorAll("#regTabs button").forEach(b=>b.addEventListener("click",()=>{
+  REG.vista=b.dataset.vista;
+  document.querySelectorAll("#regTabs button").forEach(x=>x.classList.toggle("active",x===b));
+  show($("regBandeja"), REG.vista==="bandeja"); show($("regLinks"), REG.vista==="links");
+  show($("regNuevo"), REG.vista==="bandeja"); show($("regExport"), REG.vista==="bandeja");
+  if(REG.vista==="links") loadRegLinks(); else loadRegistro();
+}));
+document.querySelectorAll("#regEstado button").forEach(b=>b.addEventListener("click",()=>{
+  REG.estado=b.dataset.estado;
+  document.querySelectorAll("#regEstado button").forEach(x=>x.classList.toggle("active",x===b));
+  loadRegistro();
+}));
+$("regRef").addEventListener("click",()=>REG.vista==="links"?loadRegLinks():loadRegistro());
+$("regNuevo").addEventListener("click",()=>{ if(REG.cat) regFormulario(null); });
+$("regLinkNuevo").addEventListener("click",()=>regLinkFormulario());
+// La descarga va con el token, así que se baja por fetch y se guarda como archivo.
+$("regExport").addEventListener("click", async ()=>{
+  const restore=btnBusy($("regExport"),"Preparando…");
+  try {
+    const r=await fetch("/api/registro/export.csv?estado=todos",{headers:{Authorization:"Bearer "+token}});
+    if(!r.ok) throw new Error("No se pudo exportar.");
+    const url=URL.createObjectURL(await r.blob());
+    const a=document.createElement("a"); a.href=url; a.download="actividades.csv"; a.click();
+    URL.revokeObjectURL(url);
+  } catch(err){ msg($("regMsg"),esc(err.message),"error"); } finally { restore(); }
+});
 
 // ── Pizarrón semanal ──────────────────────────────────────────────────
 // Avisos, tareas y recordatorios del equipo, por semana. Las tareas sin hacer pasan

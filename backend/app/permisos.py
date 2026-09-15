@@ -30,9 +30,10 @@ TALLERES_VER = "talleres.ver"
 TALLERES_EDITAR = "talleres.editar"
 USUARIOS_ADMIN = "usuarios.admin"
 PIZARRON = "pizarron"                      # el pizarrón semanal del equipo de la biblioteca
+REGISTROS = "registros"                    # registro de actividades realizadas (módulo E)
 
 _TODO = {
-    KOHA, MAILS,
+    KOHA, MAILS, REGISTROS,
     CALENDARIO_VER, CALENDARIO_EDITAR,
     SOLICITUDES_CREAR, SOLICITUDES_RESOLVER,
     INVENTARIO_VER, INVENTARIO_EDITAR,
@@ -87,6 +88,7 @@ SECCIONES: list[dict] = [
     # El calendario y las solicitudes van juntos: se usan de a pares.
     {"id": "agenda",      "titulo": "Calendario",  "permiso": CALENDARIO_VER,   "grupo": "Agenda", "movil": True},
     {"id": "solicitudes", "titulo": "Solicitudes", "permiso": SOLICITUDES_CREAR, "grupo": "Agenda", "movil": True},
+    {"id": "registro",    "titulo": "Actividades", "permiso": REGISTROS,          "grupo": "Agenda", "movil": False},
 
     # Todo lo que sale de la biblioteca hacia afuera, junto.
     {"id": "mails",      "titulo": "Escribir",    "permiso": MAILS, "grupo": "Envíos", "movil": False},

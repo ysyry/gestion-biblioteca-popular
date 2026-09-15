@@ -6,7 +6,7 @@ import logging
 from collections import Counter
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from ..auth import (
@@ -32,6 +32,7 @@ from .. import espacios
 from .. import notas
 from .. import permisos
 from .. import pizarron
+from .. import registro
 from .. import solicitudes
 from .. import usuarios
 from ..config import settings
@@ -171,6 +172,199 @@ async def password_propia(body: dict = Body(...), s: Sesion = Depends(get_sessio
     except usuarios.ErrorUsuario as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}
+
+
+# ── Registro de actividades realizadas ────────────────────────────────────────
+# La parte pública (el formulario que se comparte por link) no pide usuario: está
+# más abajo, en "Formulario público". Esta parte es la de la biblioteca.
+def _registro_error(exc: registro.ErrorRegistro) -> HTTPException:
+    if isinstance(exc, registro.NoEncontrado):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, registro.LinkCerrado):
+        return HTTPException(status_code=410, detail=str(exc))
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+def _link_publico(link: dict) -> dict:
+    """El link con su dirección armada, para copiar y compartir."""
+    base = (settings.app_public_url or "").rstrip("/")
+    return {**link, "url": f"{base}/registro/{link['token']}" if base else f"/registro/{link['token']}"}
+
+
+@router.get("/registro", tags=["registro"])
+async def registro_listar(estado: str | None = Query(None, pattern="^(recibido|validado|descartado)$"),
+                          clase: str | None = Query(None, pattern="^(actividad|taller)$"),
+                          desde: str | None = Query(None), hasta: str | None = Query(None),
+                          anio: int | None = Query(None, ge=2000, le=2100),
+                          _: Sesion = Depends(requiere(permisos.REGISTROS))):
+    """Bandeja de registros. Sin filtro de estado vienen todos, recibidos primero."""
+    items = [registro.para_ver(r) for r in
+             registro.listar(estado=estado, clase=clase, desde=desde, hasta=hasta, anio=anio)]
+    if not estado:
+        items.sort(key=lambda r: (r["estado"] != registro.RECIBIDO, ))
+    return {"items": items, "pendientes": registro.pendientes(),
+            "atencion": [registro.para_ver(r) for r in registro.con_atencion()],
+            "catalogos": registro.catalogos(), "estados": registro.ESTADOS}
+
+
+@router.get("/registro/links", tags=["registro"])
+async def registro_links(_: Sesion = Depends(requiere(permisos.REGISTROS))):
+    return {"items": [_link_publico(l) for l in registro.links()],
+            "catalogos": registro.catalogos(),
+            "publico_configurado": bool(settings.app_public_url)}
+
+
+@router.post("/registro/links", tags=["registro"])
+async def registro_link_crear(body: dict = Body(...), s: Sesion = Depends(requiere(permisos.REGISTROS))):
+    """Crea un link: general, de una actividad (precargado) o de un taller (mensual)."""
+    try:
+        return _link_publico(registro.crear_link(body or {}, s.nombre or s.usuario))
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+
+
+@router.put("/registro/links/{link_id}", tags=["registro"])
+async def registro_link_editar(link_id: str, body: dict = Body(...),
+                               _: Sesion = Depends(requiere(permisos.REGISTROS))):
+    """Abrir o cerrar un link, cambiarle el nombre o la fecha de vencimiento."""
+    try:
+        return _link_publico(registro.actualizar_link(link_id, body or {}))
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+
+
+@router.delete("/registro/links/{link_id}", tags=["registro"])
+async def registro_link_borrar(link_id: str, _: Sesion = Depends(requiere(permisos.REGISTROS))):
+    try:
+        registro.borrar_link(link_id)
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+    return {"ok": True}
+
+
+@router.get("/registro/export.csv", tags=["registro"])
+async def registro_export(estado: str | None = Query("validado", pattern="^(recibido|validado|descartado|todos)$"),
+                          anio: int | None = Query(None, ge=2000, le=2100),
+                          _: Sesion = Depends(requiere(permisos.REGISTROS))):
+    """Todos los registros en CSV, para abrir en una planilla."""
+    items = registro.listar(estado=None if estado == "todos" else estado, anio=anio)
+    csv_texto = registro.exportar_csv(sorted(items, key=registro.cuando_de))
+    nombre = f"actividades-{anio or 'todo'}-{estado}.csv"
+    return Response(content="﻿" + csv_texto, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@router.get("/registro/{reg_id}", tags=["registro"])
+async def registro_detalle(reg_id: str, _: Sesion = Depends(requiere(permisos.REGISTROS))):
+    try:
+        return registro.para_ver(registro.obtener(reg_id))
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+
+
+@router.post("/registro", tags=["registro"])
+async def registro_cargar(body: dict = Body(...), s: Sesion = Depends(requiere(permisos.REGISTROS))):
+    """Carga directa desde la app (queda validado: lo está cargando la biblioteca)."""
+    try:
+        return registro.guardar((body or {}).get("clase", "actividad"), (body or {}).get("datos") or {},
+                                cargado_por=s.nombre or s.usuario)
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+
+
+@router.put("/registro/{reg_id}", tags=["registro"])
+async def registro_corregir(reg_id: str, body: dict = Body(...),
+                            s: Sesion = Depends(requiere(permisos.REGISTROS))):
+    """Corrige o completa un registro. Queda constancia de qué se cambió."""
+    try:
+        return registro.para_ver(registro.corregir(reg_id, (body or {}).get("datos") or body or {},
+                                                   s.nombre or s.usuario))
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+
+
+@router.post("/registro/{reg_id}/resolver", tags=["registro"])
+async def registro_resolver(reg_id: str, body: dict = Body(...),
+                            s: Sesion = Depends(requiere(permisos.REGISTROS))):
+    """Validar o descartar. Solo lo validado cuenta en las estadísticas."""
+    b = body or {}
+    try:
+        return registro.para_ver(registro.resolver(reg_id, b.get("estado", ""), s.nombre or s.usuario,
+                                                   b.get("motivo", "")))
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+
+
+@router.delete("/registro/{reg_id}", tags=["registro"])
+async def registro_borrar(reg_id: str, _: Sesion = Depends(requiere(permisos.REGISTROS))):
+    try:
+        registro.borrar(reg_id)
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+    return {"ok": True}
+
+
+# ── Formulario público de registro (sin usuario) ──────────────────────────────
+# Único lugar de la API que no pide sesión: entra cualquiera que tenga el link.
+# Defensas: el código del link es largo e imposible de adivinar, se puede cerrar,
+# hay un tope de envíos por conexión y la página nunca muestra datos guardados.
+_ENVIOS_POR_IP: dict[str, list[float]] = {}
+TOPE_ENVIOS = 12          # por hora y por conexión
+
+
+def _permitir_envio(ip: str) -> bool:
+    import time
+    ahora = time.time()
+    recientes = [t for t in _ENVIOS_POR_IP.get(ip, []) if ahora - t < 3600]
+    if len(recientes) >= TOPE_ENVIOS:
+        _ENVIOS_POR_IP[ip] = recientes
+        return False
+    recientes.append(ahora)
+    _ENVIOS_POR_IP[ip] = recientes
+    if len(_ENVIOS_POR_IP) > 5000:                      # no crecer sin fin
+        for k in [k for k, v in _ENVIOS_POR_IP.items() if not v or ahora - v[-1] > 3600]:
+            _ENVIOS_POR_IP.pop(k, None)
+    return True
+
+
+@router.get("/publico/registro/{token}", tags=["publico"])
+async def publico_registro_form(token: str):
+    """Qué formulario mostrar y con qué datos ya cargados. No requiere sesión."""
+    try:
+        link = registro.por_token(token)
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+    return {
+        "clase": "taller" if link["clase"] == "taller" else "actividad",
+        "titulo": link["titulo"],
+        "precarga": link.get("precarga") or {},
+        "catalogos": registro.catalogos(),
+    }
+
+
+@router.post("/publico/registro/{token}", tags=["publico"])
+async def publico_registro_enviar(token: str, request: Request, body: dict = Body(...)):
+    """Recibe el formulario. Queda 'recibido' hasta que la biblioteca lo valide."""
+    b = body or {}
+    if (b.get("website") or "").strip():                # campo trampa: solo lo completa un robot
+        logger.info("Registro público: envío descartado por campo trampa.")
+        return {"ok": True}
+    ip = (request.client.host if request.client else "") or "desconocida"
+    if not _permitir_envio(ip):
+        raise HTTPException(status_code=429,
+                            detail="Se enviaron muchos formularios seguidos. Probá de nuevo en un rato.")
+    try:
+        link = registro.por_token(token)
+        clase = "taller" if link["clase"] == "taller" else "actividad"
+        reg = registro.guardar(clase, {**(link.get("precarga") or {}), **(b.get("datos") or {})}, link=link)
+    except registro.ErrorRegistro as exc:
+        raise _registro_error(exc) from exc
+    if link["clase"] == "actividad":                    # el de una actividad puntual se cierra solo
+        registro.actualizar_link(link["id"], {"abierto": False})
+    return {"ok": True, "id": reg["id"],
+            "resumen": {"titulo": reg["datos"]["titulo"],
+                        "cuando": registro.cuando_de(reg),
+                        "personas": reg["datos"].get("personas_total") or reg["datos"].get("participantes")}}
 
 
 # ── Pizarrón semanal (solo bibliotecarias) ────────────────────────────────────

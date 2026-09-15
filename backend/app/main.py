@@ -66,6 +66,14 @@ async def index():
     return FileResponse(_STATIC / "index.html")
 
 
+# Formulario público de registro de actividades: se abre con el link que comparte la
+# biblioteca (/registro/<código>). Es una página aparte, sin login y pensada para celular;
+# el código se valida en la API, no acá.
+@app.get("/registro/{token}", include_in_schema=False)
+async def registro_publico(token: str):
+    return FileResponse(_STATIC / "registro.html")
+
+
 @app.get("/logo.png", include_in_schema=False)
 async def logo():
     return FileResponse(_STATIC / "logo.png", media_type="image/png")

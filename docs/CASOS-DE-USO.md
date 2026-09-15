@@ -1,8 +1,9 @@
 # Casos de uso — Nuevas secciones (Comunidad)
 
 > Estado: **propuesta para validar**. Usuarios y roles, espacios y solicitudes de espacio
-> ya están en desarrollo, y las notas de socios (Módulo F) y el pizarrón semanal (Módulo G)
-> están hechos; el resto no está implementado todavía.
+> ya están en desarrollo, y las notas de socios (Módulo F), el pizarrón semanal (Módulo G)
+> y el registro básico de actividades (E·1) están hechos; el resto no está implementado
+> todavía.
 > Documento previo al desarrollo, pedido para acordar alcance antes de escribir código.
 
 ## 1. Contexto
@@ -539,7 +540,7 @@ Suma la mirada del público a la de quien coordinó, que naturalmente tiende a s
 ### Entregas dentro del módulo
 | # | Entrega | Qué incluye |
 |---|---|---|
-| E·1 | **Registro básico** | Links (general, de actividad y de taller), formulario de actividad, resumen mensual de taller, bandeja de validación, export Excel |
+| E·1 | **Registro básico** *(hecho)* | Links (general, de actividad y de taller), formulario de actividad, resumen mensual de taller, bandeja de validación, export Excel |
 | E·2 | **Tablero** | Estadísticas de CU-E5 y memoria anual |
 | E·3 | **Completitud y público** | "Faltan registrar" con recordatorio, fotos, encuesta al público |
 
@@ -731,7 +732,7 @@ solo mediante el código del link, límite de envíos y sin mostrar nunca datos 
 | 2 | **Calendario + solicitudes de espacio** | En desarrollo | Es el pedido más concreto y el que más se usa |
 | 3 | **Notas de socios** (ver, CU-F1 a F3) | Hecho | Chico, uso diario, reusa el acceso a Koha que ya existe |
 | 4 | **Pizarrón semanal** | Hecho | Chico y autónomo, uso diario del equipo |
-| 5 | **Registro de actividades** — E·1 | — | Cuanto antes arranca, antes hay histórico; el formulario público se hace para celular desde el inicio |
+| 5 | **Registro de actividades** — E·1 | Hecho | Cuanto antes arranca, antes hay histórico; el formulario público se hace para celular desde el inicio |
 | 6 | **Versión celular** (menú inferior, tarjetas, PWA) | — | Transversal: conviene antes de sumar más pantallas |
 | 7 | **Talleres y actividades** | — | Alimenta el calendario y el registro |
 | 8 | **Registro** — E·2 y E·3 | — | El tablero rinde con algunos meses de datos; "faltan registrar" necesita talleres |

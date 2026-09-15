@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Registro de actividades · Biblioteca Popular Osvaldo Bayer</title>
+<link rel="icon" href="/logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Página pública: se abre con el link que comparte la biblioteca. Pensada para
+     celular primero (es lo que tiene a mano quien acaba de dar el taller). */
+  :root { --navy:#13235B; --orange:#F5821F; --yellow:#EEB500; --magenta:#861E92; --magenta-d:#6d177a;
+          --red:#C7002A; --green:#15AA6C; --ink:#1f2430; --muted:#6b7280; --bg:#f4f5f7; --line:#e6e8ec; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Poppins",system-ui,sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:720px; margin:0 auto; padding:0 0 3rem; }
+  header { background:var(--navy); color:#fff; padding:1.1rem 1rem; display:flex; align-items:center; gap:.8rem; }
+  header img { height:44px; width:44px; background:#fff; border-radius:10px; padding:4px; object-fit:contain; }
+  header b { display:block; font-size:1rem; line-height:1.2; }
+  header span { font-size:.78rem; opacity:.75; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:1.1rem; margin:1rem; }
+  h1 { font-size:1.15rem; color:var(--navy); margin:.2rem 0 .3rem; }
+  h2 { font-size:1rem; color:var(--navy); margin:0 0 .2rem; }
+  p.sub { color:var(--muted); font-size:.85rem; margin:.1rem 0 1rem; line-height:1.5; }
+  label { display:block; font-size:.82rem; color:var(--muted); font-weight:500; margin:.9rem 0 .3rem; }
+  label .req { color:var(--red); }
+  input, select, textarea { width:100%; padding:.65rem .7rem; border:1px solid var(--line); border-radius:9px;
+          font-size:16px; font-family:inherit; background:#fff; color:var(--ink); }  /* 16px: iOS no hace zoom */
+  textarea { resize:vertical; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--magenta);
+          box-shadow:0 0 0 3px rgba(134,30,146,.14); }
+  .campo { min-width:0; }
+  .fila { display:flex; gap:.6rem; align-items:stretch; }
+  /* En una fila, los casilleros quedan alineados aunque una etiqueta ocupe dos líneas. */
+  .fila > .campo { flex:1; display:flex; flex-direction:column; }
+  .fila > .campo input, .fila > .campo select { margin-top:auto; }
+  .chips { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.35rem; }
+  .chip { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:999px;
+          padding:.45rem .85rem; font-size:.86rem; font-family:inherit; cursor:pointer; min-height:40px; }
+  .chip.on { background:var(--magenta); border-color:var(--magenta); color:#fff; font-weight:600; }
+  .chk { display:flex; align-items:center; gap:.5rem; font-size:.88rem; color:var(--ink); margin-top:.6rem; }
+  .chk input { width:auto; min-width:22px; min-height:22px; }
+  .edades { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:.5rem; margin-top:.4rem; }
+  .edad { border:1px solid var(--line); border-radius:10px; padding:.5rem .6rem; background:#fff; }
+  .edad b { display:block; font-size:.78rem; color:var(--muted); font-weight:500; margin-bottom:.3rem; }
+  .cont { display:flex; align-items:center; gap:.4rem; }
+  .cont button { width:38px; height:38px; border-radius:9px; border:1px solid var(--line); background:#fff;
+          font-size:1.1rem; cursor:pointer; color:var(--navy); }
+  .cont input { text-align:center; padding:.45rem .2rem; }
+  .estrellas { display:flex; gap:.35rem; margin-top:.35rem; }
+  .estrella { font-size:1.6rem; background:none; border:none; cursor:pointer; padding:0 .1rem; filter:grayscale(1); opacity:.45; }
+  .estrella.on { filter:none; opacity:1; }
+  .pasos { display:flex; gap:.35rem; margin:.9rem 0 .2rem; }
+  .pasos i { flex:1; height:5px; border-radius:99px; background:var(--line); }
+  .pasos i.on { background:var(--yellow); }
+  .paso-n { font-size:.78rem; color:var(--muted); font-weight:600; }
+  .botones { display:flex; gap:.6rem; margin-top:1.4rem; }
+  button.primary { flex:2; background:var(--magenta); color:#fff; border:none; padding:.85rem; border-radius:10px;
+          font-size:1rem; font-weight:600; font-family:inherit; cursor:pointer; min-height:48px; }
+  button.primary:hover { background:var(--magenta-d); }
+  button.primary:disabled { opacity:.6; }
+  button.sec { flex:1; background:#fff; border:1px solid var(--line); color:var(--ink); border-radius:10px;
+          padding:.85rem; font-size:.95rem; font-family:inherit; cursor:pointer; min-height:48px; }
+  .msg { padding:.8rem .9rem; border-radius:10px; font-size:.88rem; margin:.8rem 0; line-height:1.5; }
+  .msg.error { background:#fbe4e8; color:var(--red); border:1px solid #f3c2cc; }
+  .msg.info { background:#fff8e2; color:#8a5a00; border:1px solid #f0d5a0; }
+  .ok-grande { text-align:center; padding:1.5rem .5rem; }
+  .ok-grande .tilde { font-size:3rem; color:var(--green); }
+  .ok-grande h1 { margin:.4rem 0; }
+  .resumen { background:#f4f5f7; border-radius:10px; padding:.8rem; font-size:.9rem; line-height:1.6; text-align:left; margin-top:1rem; }
+  .pie { text-align:center; color:var(--muted); font-size:.76rem; margin:1.2rem 1rem 0; line-height:1.5; }
+  .trampa { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+  @media (min-width:700px){ .card { padding:1.6rem; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="/logo.png" alt="" />
+  <div><b>Biblioteca Popular Osvaldo Bayer</b><span id="subtitulo">Registro de actividades</span></div>
+</header>
+
+<div class="wrap">
+  <div class="card" id="pantalla">
+    <p class="sub">Cargando…</p>
+  </div>
+  <p class="pie">Lo que cargues acá lo revisa la biblioteca. No pedimos datos de las personas que
+    asistieron: la asistencia se informa en números.</p>
+</div>
+
+<script>
+const TOKEN = location.pathname.split("/").filter(Boolean).pop();
+const $ = (id)=>document.getElementById(id);
+const esc = (s)=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const BORRADOR = "registro_borrador_"+TOKEN;
+let CONF=null, PASO=0, DATOS={}, ENVIANDO=false;
+
+async function api(path, opts={}){
+  const r = await fetch(path, {headers:{"Content-Type":"application/json"}, ...opts});
+  let d=null; try { d = await r.json(); } catch(_) {}
+  if(!r.ok) throw new Error((d && d.detail) || "No se pudo conectar con la biblioteca.");
+  return d;
+}
+
+// ── Arranque ──
+(async ()=>{
+  try {
+    CONF = await api("/api/publico/registro/"+encodeURIComponent(TOKEN));
+    $("subtitulo").textContent = CONF.titulo || "Registro de actividades";
+    DATOS = {...(CONF.precarga||{}), ...leerBorrador()};
+    dibujar();
+  } catch(err){
+    $("pantalla").innerHTML = `<h1>No pudimos abrir el formulario</h1>
+      <div class="msg error">${esc(err.message)}</div>
+      <p class="sub">Si el link te lo pasó la biblioteca hace mucho, pedile uno nuevo.</p>`;
+  }
+})();
+
+function leerBorrador(){
+  try { return JSON.parse(localStorage.getItem(BORRADOR)||"{}"); } catch(_) { return {}; }
+}
+function guardarBorrador(){
+  try { localStorage.setItem(BORRADOR, JSON.stringify(DATOS)); } catch(_) {}
+}
+function limpiarBorrador(){ try { localStorage.removeItem(BORRADOR); } catch(_) {} }
+
+// ── Campos ──
+// Cada campo va envuelto en .campo: así dos campos en una fila reparten el ancho
+// sin que se separen la etiqueta y su casillero.
+function txt(campo, etiqueta, {req=false, tipo="text", hint="", ph=""}={}){
+  return `<div class="campo"><label for="f_${campo}">${esc(etiqueta)}${req?' <span class="req">*</span>':""}</label>
+    <input id="f_${campo}" type="${tipo}" value="${esc(DATOS[campo]??"")}" placeholder="${esc(ph)}"
+      data-campo="${campo}" ${tipo==="number"?'min="0" inputmode="numeric"':""} />
+    ${hint?`<p class="sub" style="margin:.25rem 0 0">${esc(hint)}</p>`:""}</div>`;
+}
+function area(campo, etiqueta, {req=false, filas=3, ph=""}={}){
+  return `<div class="campo"><label for="f_${campo}">${esc(etiqueta)}${req?' <span class="req">*</span>':""}</label>
+    <textarea id="f_${campo}" rows="${filas}" data-campo="${campo}" placeholder="${esc(ph)}">${esc(DATOS[campo]??"")}</textarea></div>`;
+}
+function sel(campo, etiqueta, opciones, {req=false, vacio=""}={}){
+  const ops = Object.entries(opciones).map(([k,v])=>
+    `<option value="${esc(k)}"${DATOS[campo]===k?" selected":""}>${esc(v)}</option>`).join("");
+  return `<div class="campo"><label for="f_${campo}">${esc(etiqueta)}${req?' <span class="req">*</span>':""}</label>
+    <select id="f_${campo}" data-campo="${campo}">${vacio?`<option value="">${esc(vacio)}</option>`:""}${ops}</select></div>`;
+}
+function chips(campo, etiqueta, opciones, {max=0, hint=""}={}){
+  const elegidas = DATOS[campo]||[];
+  return `<label>${esc(etiqueta)}</label>${hint?`<p class="sub" style="margin:0">${esc(hint)}</p>`:""}
+    <div class="chips" data-chips="${campo}" data-max="${max}">${Object.entries(opciones).map(([k,v])=>
+      `<button type="button" class="chip${elegidas.includes(k)?" on":""}" data-valor="${esc(k)}">${esc(v)}</button>`).join("")}</div>`;
+}
+function estrellas(campo, etiqueta){
+  const v = Number(DATOS[campo]||0);
+  return `<label>${esc(etiqueta)}</label>
+    <div class="estrellas" data-estrellas="${campo}">${[1,2,3,4,5].map(n=>
+      `<button type="button" class="estrella${n<=v?" on":""}" data-valor="${n}" aria-label="${n} de 5">★</button>`).join("")}</div>`;
+}
+function edades(){
+  const f = DATOS.franjas||{};
+  return `<label>¿De qué edades? <span style="font-weight:400">(si lo completás, el total se calcula solo)</span></label>
+    <div class="edades">${Object.entries(CONF.catalogos.franjas).map(([k,v])=>
+      `<div class="edad"><b>${esc(v)} años</b><div class="cont" data-franja="${esc(k)}">
+        <button type="button" data-paso="-1">−</button>
+        <input type="number" min="0" inputmode="numeric" value="${esc(f[k]??"")}" />
+        <button type="button" data-paso="1">+</button></div></div>`).join("")}</div>`;
+}
+function espacioCampo(){
+  const ops = Object.fromEntries((CONF.catalogos.espacios||[]).map(e=>[e.id, e.nombre]));
+  return sel("espacio_id","¿Dónde fue?", ops, {vacio:"Otro lugar o virtual"}) +
+    (DATOS.espacio_id ? "" : txt("espacio_otro","¿Dónde?", {ph:"Ej.: escuela 45, plaza, por Zoom…"}));
+}
+
+// ── Pantallas ──
+function dibujar(){
+  if(CONF.clase==="taller") return dibujarTaller();
+  const pasos = [pasoQueFue, pasoQuienesVinieron, pasoComoSalio];
+  $("pantalla").innerHTML = `
+    <h1>${esc(CONF.titulo||"Registro de actividad")}</h1>
+    <p class="sub">Contanos qué pasó. Se completa en menos de 3 minutos; solo los campos con
+      <span class="req">*</span> son obligatorios.</p>
+    <div class="pasos">${[0,1,2].map(i=>`<i class="${i<=PASO?"on":""}"></i>`).join("")}</div>
+    <p class="paso-n">Paso ${PASO+1} de 3</p>
+    <form id="form" autocomplete="off">${pasos[PASO]()}
+      <input class="trampa" type="text" id="website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+      <div id="error"></div>
+      <div class="botones">
+        ${PASO>0?'<button type="button" class="sec" id="atras">Atrás</button>':""}
+        <button type="submit" class="primary">${PASO<2?"Siguiente":"Enviar"}</button>
+      </div>
+    </form>`;
+  enganchar();
+}
+function pasoQueFue(){
+  const c = CONF.catalogos;
+  return `<h2>Qué fue</h2>
+    ${txt("titulo","Nombre de la actividad",{req:true, ph:"Ej.: Charla sobre huerta urbana"})}
+    ${sel("tipo","Tipo", c.tipos, {req:true, vacio:"Elegí…"})}
+    ${txt("fecha","¿Qué día fue?",{req:true, tipo:"date"})}
+    <div class="fila">${txt("hora_inicio","Empezó",{req:true, tipo:"time"})}${txt("hora_fin","Terminó",{tipo:"time"})}</div>
+    ${espacioCampo()}
+    ${sel("modalidad","Modalidad", c.modalidades)}
+    ${chips("tematicas","¿De qué se trató?", c.tematicas, {max:3, hint:"Hasta 3."})}
+    ${txt("a_cargo","¿Quién estuvo a cargo?",{ph:"Nombre y, si querés, si es tallerista, subcomisión o invitada/o"})}
+    ${sel("organiza","¿Quién organizó?", c.organiza)}
+    ${txt("organiza_detalle","¿Qué subcomisión o institución?",{ph:"Opcional"})}`;
+}
+function pasoQuienesVinieron(){
+  const c = CONF.catalogos;
+  return `<h2>Quiénes vinieron</h2>
+    ${txt("personas_total","¿Cuántas personas vinieron?",{req:true, tipo:"number"})}
+    <label class="chk"><input type="checkbox" id="f_personas_aprox" data-campo="personas_aprox"
+      ${DATOS.personas_aprox?"checked":""} /> Es un número aproximado</label>
+    ${edades()}
+    ${txt("primera_vez","¿Cuántas venían por primera vez a la biblioteca?",{tipo:"number", hint:"Aproximado, si lo sabés."})}
+    ${chips("difusion","¿Cómo se enteraron?", c.difusion)}
+    ${sel("acceso","¿Cómo se accedía?", c.accesos)}
+    <div class="fila">${txt("monto","Si era arancelada, ¿cuánto?",{ph:"Opcional"})}${txt("recaudacion","¿Cuánto se recaudó?",{ph:"Opcional"})}</div>`;
+}
+function pasoComoSalio(){
+  const c = CONF.catalogos;
+  return `<h2>Cómo salió</h2>
+    ${area("descripcion","¿De qué se trató? Contanos en 2 o 3 líneas",{ph:"Esto es lo que después va a la memoria de la biblioteca."})}
+    ${estrellas("valoracion","¿Cómo salió?")}
+    ${area("funciono","¿Qué funcionó bien?",{filas:2})}
+    ${area("mejorar","¿Qué mejorarías o qué faltó?",{filas:2})}
+    ${area("incidente","¿Hubo algún problema? (espacio, equipamiento, algo roto o que falta)",{filas:2})}
+    <label class="chk"><input type="checkbox" id="f_incidente_atencion" data-campo="incidente_atencion"
+      ${DATOS.incidente_atencion?"checked":""} /> Esto necesita que alguien lo resuelva</label>
+    ${sel("continua","¿Continúa o se repetiría?", c.continua, {vacio:"Elegí…"})}
+    <hr style="border:none;border-top:1px solid var(--line);margin:1.3rem 0" />
+    ${txt("nombre_completa","¿Quién completa este formulario?",{req:true, ph:"Tu nombre"})}
+    ${txt("contacto_completa","Tu contacto",{ph:"Mail o teléfono, por si hay que preguntarte algo"})}`;
+}
+function dibujarTaller(){
+  const c = CONF.catalogos;
+  $("pantalla").innerHTML = `
+    <h1>${esc(CONF.titulo||"Resumen del mes")}</h1>
+    <p class="sub">Resumen mensual del taller. Se completa una vez por mes, cuando el mes termina.
+      Solo los campos con <span class="req">*</span> son obligatorios.</p>
+    <form id="form" autocomplete="off">
+      ${txt("titulo","Taller",{req:true})}
+      ${txt("mes","¿Qué mes informás?",{req:true, tipo:"month"})}
+      ${txt("tallerista","¿Quién lo da?",{})}
+      <h2 style="margin-top:1.3rem">Los encuentros</h2>
+      <div class="fila">${txt("encuentros","¿Cuántos se hicieron?",{req:true, tipo:"number"})}${txt("suspendidos","¿Cuántos se suspendieron?",{tipo:"number"})}</div>
+      ${sel("motivo_suspension","Si se suspendió alguno, ¿por qué?", c.suspension, {vacio:"—"})}
+      <h2 style="margin-top:1.3rem">Quiénes participaron</h2>
+      ${txt("participantes","Personas distintas que vinieron en el mes",{req:true, tipo:"number"})}
+      ${txt("asistencia_promedio","¿Cuántas por encuentro, en promedio?",{tipo:"number"})}
+      ${edades()}
+      <div class="fila">${txt("altas","¿Cuántas se sumaron?",{tipo:"number"})}${txt("bajas","¿Cuántas dejaron?",{tipo:"number"})}</div>
+      <h2 style="margin-top:1.3rem">Cómo viene</h2>
+      ${area("trabajado","¿Qué se trabajó este mes?",{filas:3})}
+      ${estrellas("valoracion","¿Cómo viene el taller?")}
+      ${area("mejorar","¿Qué mejorarías o qué hace falta?",{filas:2})}
+      ${area("incidente","¿Hubo algún problema? (espacio, materiales, equipamiento)",{filas:2})}
+      <label class="chk"><input type="checkbox" id="f_incidente_atencion" data-campo="incidente_atencion"
+        ${DATOS.incidente_atencion?"checked":""} /> Esto necesita que alguien lo resuelva</label>
+      <hr style="border:none;border-top:1px solid var(--line);margin:1.3rem 0" />
+      ${txt("nombre_completa","¿Quién completa este formulario?",{req:true, ph:"Tu nombre"})}
+      ${txt("contacto_completa","Tu contacto",{ph:"Mail o teléfono"})}
+      <input class="trampa" type="text" id="website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+      <div id="error"></div>
+      <div class="botones"><button type="submit" class="primary">Enviar</button></div>
+    </form>`;
+  enganchar();
+}
+
+// ── Enganches ──
+function enganchar(){
+  const f = $("form");
+  f.querySelectorAll("[data-campo]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      DATOS[el.dataset.campo] = el.type==="checkbox" ? el.checked : el.value;
+      guardarBorrador();
+      if(el.dataset.campo==="espacio_id") dibujar();      // "otro lugar" muestra el campo libre
+    });
+  });
+  f.querySelectorAll("[data-chips]").forEach(cont=>{
+    const campo=cont.dataset.chips, max=Number(cont.dataset.max||0);
+    cont.querySelectorAll(".chip").forEach(ch=>ch.addEventListener("click",()=>{
+      const actuales = new Set(DATOS[campo]||[]);
+      if(actuales.has(ch.dataset.valor)) actuales.delete(ch.dataset.valor);
+      else {
+        if(max && actuales.size>=max) return;
+        actuales.add(ch.dataset.valor);
+      }
+      DATOS[campo]=[...actuales]; guardarBorrador();
+      cont.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",(DATOS[campo]||[]).includes(x.dataset.valor)));
+    }));
+  });
+  f.querySelectorAll("[data-estrellas]").forEach(cont=>{
+    cont.querySelectorAll(".estrella").forEach(b=>b.addEventListener("click",()=>{
+      const v=Number(b.dataset.valor);
+      DATOS[cont.dataset.estrellas] = (DATOS[cont.dataset.estrellas]===v) ? "" : v;   // tocar dos veces: se borra
+      guardarBorrador();
+      cont.querySelectorAll(".estrella").forEach(x=>x.classList.toggle("on", Number(x.dataset.valor)<=Number(DATOS[cont.dataset.estrellas]||0)));
+    }));
+  });
+  f.querySelectorAll("[data-franja]").forEach(cont=>{
+    const k=cont.dataset.franja, inp=cont.querySelector("input");
+    const set=(v)=>{
+      DATOS.franjas={...(DATOS.franjas||{})};
+      if(v===""||Number(v)<=0) delete DATOS.franjas[k]; else DATOS.franjas[k]=Number(v);
+      inp.value = v===""?"":Math.max(0,Number(v));
+      totalDesdeFranjas(); guardarBorrador();
+    };
+    inp.addEventListener("input",()=>set(inp.value));
+    cont.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>
+      set(String(Math.max(0, Number(inp.value||0)+Number(b.dataset.paso))))));
+  });
+  const atras=$("atras"); if(atras) atras.onclick=()=>{ PASO--; dibujar(); window.scrollTo(0,0); };
+  f.addEventListener("submit", enviarPaso);
+}
+// Si se cargan las edades, el total sale de la suma (y se muestra actualizado).
+function totalDesdeFranjas(){
+  const suma = Object.values(DATOS.franjas||{}).reduce((a,b)=>a+Number(b||0),0);
+  const campo = CONF.clase==="taller" ? null : "personas_total";
+  if(!campo || !suma) return;
+  DATOS[campo]=suma;
+  const el=$("f_"+campo); if(el) el.value=suma;
+}
+
+function falta(campo, etiqueta){
+  const v=DATOS[campo];
+  if(v===undefined || v===null || String(v).trim()==="") return etiqueta;
+  return null;
+}
+function validarPaso(){
+  const req = CONF.clase==="taller"
+    ? [["titulo","el nombre del taller"],["mes","el mes"],["encuentros","cuántos encuentros se hicieron"],
+       ["participantes","cuántas personas participaron"],["nombre_completa","tu nombre"]]
+    : [[["titulo","el nombre de la actividad"],["tipo","el tipo"],["fecha","la fecha"],["hora_inicio","la hora de inicio"]],
+       [["personas_total","cuántas personas vinieron"]],
+       [["nombre_completa","tu nombre"]]][PASO];
+  return req.map(([c,e])=>falta(c,e)).filter(Boolean);
+}
+
+async function enviarPaso(e){
+  e.preventDefault();
+  if(ENVIANDO) return;
+  const faltan = validarPaso();
+  if(faltan.length){
+    $("error").innerHTML = `<div class="msg error">Falta ${esc(faltan.join(", "))}.</div>`;
+    $("error").scrollIntoView({behavior:"smooth", block:"center"});
+    return;
+  }
+  $("error").innerHTML="";
+  if(CONF.clase!=="taller" && PASO<2){ PASO++; dibujar(); window.scrollTo(0,0); return; }
+  await enviarTodo(e.target.querySelector("button.primary"));
+}
+
+async function enviarTodo(boton){
+  ENVIANDO=true; if(boton){ boton.disabled=true; boton.textContent="Enviando…"; }
+  const datos = {...DATOS,
+    quien_completa:{nombre:DATOS.nombre_completa, contacto:DATOS.contacto_completa||""}};
+  delete datos.nombre_completa; delete datos.contacto_completa;
+  try {
+    const r = await api("/api/publico/registro/"+encodeURIComponent(TOKEN),
+      {method:"POST", body:JSON.stringify({datos, website:$("website").value})});
+    limpiarBorrador();
+    gracias(r.resumen||{});
+  } catch(err){
+    ENVIANDO=false;
+    if(boton){ boton.disabled=false; boton.textContent="Enviar"; }
+    $("error").innerHTML = `<div class="msg error">${esc(err.message)}</div>`;
+    $("error").scrollIntoView({behavior:"smooth", block:"center"});
+  }
+}
+
+function gracias(r){
+  $("pantalla").innerHTML = `<div class="ok-grande">
+    <div class="tilde">✓</div>
+    <h1>¡Gracias!</h1>
+    <p class="sub">Ya quedó registrado. La biblioteca lo revisa y lo suma a la memoria de actividades.</p>
+    <div class="resumen"><b>${esc(r.titulo||"")}</b><br>
+      ${r.cuando?`Cuándo: ${esc(r.cuando)}<br>`:""}
+      ${r.personas!=null?`Personas: ${esc(r.personas)}`:""}</div>
+  </div>`;
+  window.scrollTo(0,0);
+}
+</script>
+</body>
+</html>
