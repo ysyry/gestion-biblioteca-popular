@@ -9,7 +9,7 @@ import asyncio
 
 import pytest
 
-from app.koha.client import KohaAuthError, KohaClient, KohaError
+from app.koha.client import KohaAuthError, KohaClient, KohaError, sql_literal
 
 LOGIN_HTML = """<!DOCTYPE html><html><head><title>Koha › Ingresar</title></head>
 <body><form><input type="hidden" name="koha_login_context" value="intranet">
@@ -80,6 +80,31 @@ def test_el_parser_solo_produciria_basura_con_html():
     # Y por eso _exigir_datos tiene que cortar antes de llegar acá:
     with pytest.raises(KohaAuthError):
         KohaClient._exigir_datos(LOGIN_HTML, "Consulta")
+
+
+# ── Parámetros: el texto de la usuaria nunca se ejecuta como SQL ────────────
+@pytest.mark.parametrize("valor, esperado", [
+    ("Paz", "'Paz'"),
+    ("O'Brien", "'O''Brien'"),
+    ("%kindle%", "'%kindle%'"),
+    ("a\\b", "'a\\\\b'"),
+])
+def test_sql_literal_escapa(valor, esperado):
+    assert sql_literal(valor) == esperado
+
+
+def test_barra_invertida_no_cierra_el_string():
+    """Regresión: con solo duplicar comillas, `\\'` cerraba el string en MySQL.
+
+    `\\' OR 1=1 -- ` quedaba `'\\'' OR 1=1 -- '`: MySQL lee `\\'` como comilla
+    escapada, la siguiente cierra, y `OR 1=1` se ejecutaba.
+    """
+    sql = KohaClient._substitute("SELECT 1 WHERE x = <<t>>", ["\\' OR 1=1 -- "])
+    literal = sql.removeprefix("SELECT 1 WHERE x = ")
+    assert literal == "'\\\\'' OR 1=1 -- '"
+    # Leído como MySQL: `\\\\` es una barra, `''` una comilla, y el string termina al final.
+    cuerpo = literal[1:-1]
+    assert cuerpo.replace("\\\\", "").replace("''", "").count("'") == 0
 
 
 def test_parse_tsv_con_datos_de_verdad():

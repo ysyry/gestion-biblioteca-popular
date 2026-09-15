@@ -30,6 +30,18 @@ RUN_PATH = "/cgi-bin/koha/reports/guided_reports.pl"
 LOGIN_MARKER = "auth.tt"
 
 
+def sql_literal(valor) -> str:
+    """Devuelve `valor` como string SQL de MySQL, listo para pegar en una consulta.
+
+    En MySQL la barra invertida también escapa dentro de un string. Duplicar solo las
+    comillas no alcanza: con `\\'` la comilla "escapada" cierra el string y lo que
+    sigue se ejecuta como SQL. Por eso primero se duplican las barras y después las
+    comillas; el byte nulo va como `\\0`.
+    """
+    s = str(valor).replace("\\", "\\\\").replace("'", "''").replace("\x00", "\\0")
+    return f"'{s}'"
+
+
 class KohaError(Exception):
     """Error genérico al hablar con Koha."""
 
@@ -144,11 +156,11 @@ class KohaClient:
 
     @staticmethod
     def _substitute(sql: str, params: list[str]) -> str:
-        """Reemplaza los placeholders <<...>> por los valores, EN ORDEN, escapando comillas.
+        """Reemplaza los placeholders <<...>> por los valores, EN ORDEN, como strings SQL.
 
         Koha normalmente hace esto al ejecutar; lo replicamos para ir directo al export
         en un solo request. Los valores se citan como string (sirve para LIKE y = sobre
-        cardnumber/textos) y se escapan las comillas simples para evitar romper el SQL.
+        cardnumber/textos) con `sql_literal`, que los escapa para MySQL.
         """
         values = iter(params)
 
@@ -157,7 +169,7 @@ class KohaClient:
                 v = next(values)
             except StopIteration:
                 return _m.group(0)
-            return "'" + str(v).replace("'", "''") + "'"
+            return sql_literal(v)
 
         return re.sub(r"<<[^>]*>>", repl, sql)
 
