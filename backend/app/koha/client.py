@@ -212,7 +212,10 @@ class KohaClient:
     @staticmethod
     def _parse_tsv(text: str) -> list[dict]:
         """Parsea el export separado por tabuladores en lista de dicts (clave = encabezado)."""
-        reader = csv.reader(io.StringIO(text), delimiter="\t")
+        # Koha no cita ni escapa los campos: una comilla es parte del dato. Con el modo
+        # por defecto, un título que empieza con comillas se "abría" y se tragaba las
+        # columnas y filas siguientes hasta la próxima comilla.
+        reader = csv.reader(io.StringIO(text), delimiter="\t", quoting=csv.QUOTE_NONE)
         rows = [r for r in reader if r and any(c.strip() for c in r)]
         if not rows:
             return []

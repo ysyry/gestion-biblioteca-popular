@@ -112,6 +112,17 @@ def test_parse_tsv_con_datos_de_verdad():
     assert KohaClient._parse_tsv(TSV_UNA_COLUMNA) == [{"total": "1380"}]
 
 
+def test_parse_tsv_comillas_son_parte_del_dato():
+    """Koha exporta sin citar. Un título entre comillas no puede comerse la fila siguiente."""
+    texto = ('barcode\ttitle\tdate_due\n'
+             '111\t"Rayuela" edición aniversario\t2026-10-01\n'
+             '222\tEl "principito\t2026-10-02\n')
+    assert KohaClient._parse_tsv(texto) == [
+        {"barcode": "111", "title": '"Rayuela" edición aniversario', "date_due": "2026-10-01"},
+        {"barcode": "222", "title": 'El "principito', "date_due": "2026-10-02"},
+    ]
+
+
 # ── Renovación de sesión: una sola vez aunque la pidan muchos a la vez ─────
 def _cliente():
     return KohaClient("http://koha.test", "usuaria", "clave")
