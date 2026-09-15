@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import Counter
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -28,6 +29,7 @@ from .. import cuotas
 from .. import pagos
 from .. import cache
 from .. import espacios
+from .. import notas
 from .. import permisos
 from .. import solicitudes
 from .. import usuarios
@@ -39,6 +41,9 @@ TTL_CATALOG = 3600     # catálogo (cambia día a día)
 TTL_HEAVY = 1800       # estrategia / histórico (datos históricos)
 TTL_CRUCE = 900        # cruce Koha↔planilla
 TTL_AGENDA = 1800      # agenda (eventos cambian lento)
+TTL_NOTAS = 60         # notas de socios: se cargan en Koha durante el día
+TTL_AVISOS = 300       # 📝 en Préstamos / Mails: un vistazo, no hace falta al segundo
+AVISOS_DIAS = 60       # una novedad sin resolver "reciente" es de los últimos 60 días
 
 
 async def _loans_contact_cached(repo: KohaRepository, fresh: bool = False):
@@ -503,10 +508,11 @@ async def member_profile(cardnumber: str, repo: KohaRepository = Depends(get_rep
     Nota: lo relativo a pagos de cuotas (deuda / estado de cuenta) se gestiona en
     una planilla aparte; será un módulo separado (ver docs/ISSUE-modulo-pagos.md).
     """
-    profile, loans, history = await asyncio.gather(
+    profile, loans, history, (notas_socio, notas_error) = await asyncio.gather(
         repo.member_profile(cardnumber),
         repo.member_loans(cardnumber),
         repo.member_history(cardnumber),
+        _notas_de_socio(repo, cardnumber),
     )
     socio = profile[0] if profile else None
     if socio is None:
@@ -516,7 +522,93 @@ async def member_profile(cardnumber: str, repo: KohaRepository = Depends(get_rep
         "socio": socio,
         "prestamos_vigentes": loans,
         "historial": history,
+        "notas": notas_socio,
+        "notas_error": notas_error,
     }
+
+
+async def _notas_de_socio(repo: KohaRepository, cardnumber: str):
+    """Notas del socio para la ficha. Si esa consulta falla, la ficha se muestra igual:
+    devuelve (None, motivo) y la pantalla avisa, en vez de dibujar "sin notas"."""
+    try:
+        return notas.armar(await repo.member_notes(cardnumber)), None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("notas del socio %s: %s", cardnumber, exc)
+        return None, "No se pudieron leer las notas desde Koha."
+
+
+# ── Notas de socios (mensajes internos de Koha; solo lectura) ─────────────────
+@router.get("/notas", tags=["notas"])
+async def notas_listar(
+    dias: int = Query(30, ge=0, le=36500, description="Últimos N días. 0 = todo el historial"),
+    q: str | None = Query(None, max_length=100, description="Texto a buscar en las notas"),
+    tipo: str | None = Query(None, pattern="^(cuotas|reclamo|novedad)$"),
+    pendientes: bool = Query(False, description="Solo novedades sin marcar como resueltas"),
+    fresh: bool = Query(False),
+    repo: KohaRepository = Depends(get_repository),
+):
+    """Notas de todos los socios, de la más nueva a la más vieja.
+
+    El conteo por tipo es sobre el período y la búsqueda, antes de filtrar por tipo:
+    así los botones de filtro muestran cuántas hay de cada una.
+    """
+    desde = date.today() - timedelta(days=dias) if dias else None
+    texto = (q or "").strip() or None
+    if texto:
+        # Las búsquedas no se cachean: cada texto distinto sería una entrada nueva.
+        filas = await repo.recent_notes(desde, texto)
+    else:
+        key = f"notas:{desde.isoformat() if desde else 'todo'}"
+        if fresh:
+            cache.invalidate(key)
+        filas = await cache.cached(key, TTL_NOTAS, lambda: repo.recent_notes(desde))
+
+    items = notas.armar(filas)
+    conteo = Counter(n["tipo"] for n in items)
+    pendientes_total = sum(1 for n in items if n["tipo"] == notas.NOVEDAD and not n["resuelta"])
+    if tipo:
+        items = [n for n in items if n["tipo"] == tipo]
+    if pendientes:              # "pendiente" solo tiene sentido para una novedad
+        items = [n for n in items if n["tipo"] == notas.NOVEDAD and not n["resuelta"]]
+    return {
+        "items": items,
+        "conteo": {t: conteo.get(t, 0) for t in notas.ETIQUETAS},
+        "novedades_pendientes": pendientes_total,
+        "desde": desde.isoformat() if desde else None,
+        "limite_alcanzado": len(filas) >= notas.LIMITE,
+    }
+
+
+@router.get("/notas/avisos", tags=["notas"])
+async def notas_avisos(fresh: bool = Query(False), repo: KohaRepository = Depends(get_repository)):
+    """Carnet → novedades sin resolver de los últimos días.
+
+    Lo usan Préstamos, Mails y Automáticos para mostrar un 📝 al lado del socio: si
+    avisó "lo devuelvo en noviembre", que se vea antes de mandarle un reclamo.
+    """
+    desde = date.today() - timedelta(days=AVISOS_DIAS)
+    if fresh:
+        cache.invalidate("notas_avisos")
+    filas = await cache.cached("notas_avisos", TTL_AVISOS,
+                               lambda: repo.recent_notes(desde), swr=not fresh)
+    return {"dias": AVISOS_DIAS,
+            "items": notas.avisos_por_socio(notas.armar(filas), AVISOS_DIAS)}
+
+
+@router.post("/notas/{nota_id}/resuelta", tags=["notas"])
+async def notas_marcar(nota_id: str, body: dict = Body(default={}),
+                       s: Sesion = Depends(requiere(permisos.KOHA))):
+    """Marca (o desmarca con {"resuelta": false}) una novedad como resuelta.
+
+    La marca vive en la app: Koha no tiene dónde guardarla. La nota no se toca.
+    """
+    resuelta = bool((body or {}).get("resuelta", True))
+    try:
+        marca = notas.marcar(nota_id, resuelta, s.nombre or s.usuario)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": nota_id, "resuelta": resuelta,
+            "resuelta_por": marca.get("por", ""), "resuelta_cuando": marca.get("cuando", "")}
 
 
 # ── Mails ─────────────────────────────────────────────────────────────────────

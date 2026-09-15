@@ -150,6 +150,16 @@ class KohaRepository:
         """Todos los préstamos vigentes con contacto y días respecto del vencimiento."""
         return await self._run(REPORTS["loans_contact"])
 
+    async def member_notes(self, cardnumber: str) -> list[dict[str, Any]]:
+        """Notas (mensajes internos) de un socio, crudas. Ver app/notas.py."""
+        from .. import notas
+        return await self._client.run_sql(notas.sql_de_socio(cardnumber))
+
+    async def recent_notes(self, desde, texto: str | None = None) -> list[dict[str, Any]]:
+        """Notas de todos los socios desde `desde` (date o None), con búsqueda opcional."""
+        from .. import notas
+        return await self._client.run_sql(notas.sql_recientes(desde, texto))
+
     async def run_sql(self, sql: str) -> list[dict[str, Any]]:
         """Consulta SQL interna (estadísticas de catálogo). Sin entrada del usuario."""
         return await self._client.run_sql(sql)

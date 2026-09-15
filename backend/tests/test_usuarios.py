@@ -228,7 +228,13 @@ def test_menu_agrupa_envios():
 def test_menu_deja_sueltas_las_que_no_tienen_grupo():
     menu = permisos.menu_de("bibliotecaria")
     sueltas = [e["id"] for e in menu if e["tipo"] == "seccion"]
-    assert sueltas == ["stats", "loans", "members", "cuotas", "usuarios"]
+    assert sueltas == ["stats", "loans", "cuotas", "usuarios"]
+
+
+def test_menu_agrupa_socios_y_notas():
+    menu = permisos.menu_de("comision")
+    socios = next(e for e in menu if e.get("titulo") == "Socios")
+    assert [i["id"] for i in socios["items"]] == ["members", "notas"]
 
 
 def test_menu_no_pierde_ninguna_seccion():

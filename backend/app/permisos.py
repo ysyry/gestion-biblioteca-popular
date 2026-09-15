@@ -75,7 +75,9 @@ def puede(rol: str, permiso: str) -> bool:
 SECCIONES: list[dict] = [
     {"id": "stats",      "titulo": "Inicio",      "permiso": KOHA,           "movil": True},
     {"id": "loans",      "titulo": "Préstamos",   "permiso": KOHA,           "movil": True},
-    {"id": "members",    "titulo": "Socios",      "permiso": KOHA,           "movil": True},
+    # La ficha y las notas de los socios, juntas: una nota lleva a la ficha y viceversa.
+    {"id": "members",    "titulo": "Buscar",      "permiso": KOHA, "grupo": "Socios", "movil": True},
+    {"id": "notas",      "titulo": "Notas",       "permiso": KOHA, "grupo": "Socios", "movil": True},
     {"id": "cuotas",     "titulo": "Cuotas",      "permiso": KOHA,           "movil": False},
     # El calendario y las solicitudes van juntos: se usan de a pares.
     {"id": "agenda",      "titulo": "Calendario",  "permiso": CALENDARIO_VER,   "grupo": "Agenda", "movil": True},

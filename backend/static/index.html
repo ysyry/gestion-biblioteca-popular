@@ -454,6 +454,33 @@
           cursor:pointer; font-size:.85rem; font-family:inherit; margin-bottom:1.2rem; color:var(--ink); }
   .btn-volver:hover { border-color:var(--magenta); color:var(--magenta); }
 
+  /* ── Notas de socios (mensajes internos de Koha) ───────────────────────── */
+  .nota { display:flex; gap:.9rem; align-items:flex-start; padding:.75rem .2rem; border-bottom:1px solid var(--line); }
+  .nota:last-child { border-bottom:none; }
+  .nota .cuando { flex:0 0 5.4rem; font-size:.8rem; color:var(--muted); padding-top:.12rem; }
+  .nota .cuerpo { flex:1; min-width:0; }
+  .nota .quien { font-size:.86rem; font-weight:600; color:var(--navy); cursor:pointer; margin-right:.35rem; }
+  .nota .quien:hover { color:var(--magenta); text-decoration:underline; }
+  .nota .quien small { color:var(--muted); font-weight:400; }
+  .nota .texto { white-space:pre-wrap; word-break:break-word; font-size:.9rem; line-height:1.45; margin-top:.3rem; }
+  .nota.resuelta .texto { color:var(--muted); }
+  .nota .acciones button { font-size:.78rem; padding:.3rem .7rem; white-space:nowrap; }
+  .nota-marca { font-size:.76rem; color:var(--green); margin-top:.3rem; }
+  .badge.nota-novedad { background:#fff4e0; color:#8a5a00; }
+  .notas-destacadas { background:#fff4e0; border:1px solid #f0d5a0; border-radius:10px;
+          padding:.7rem .9rem; margin-bottom:.6rem; font-size:.88rem; line-height:1.45; }
+  .notas-destacadas b { color:#8a5a00; }
+  .notas-filtros { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; margin-bottom:.9rem; }
+  .notas-filtros .subtabs { margin:0; }
+  .notas-filtros select { width:auto; padding:.45rem .6rem; font-size:.86rem; }
+  .nota-ico { background:none; border:none; padding:0 .15rem; margin-left:.25rem; cursor:pointer;
+          font-size:.95rem; line-height:1; vertical-align:-.05em; }
+  @media (max-width:680px){
+    .nota { flex-wrap:wrap; gap:.3rem .9rem; } .nota .cuando, .nota .acciones { flex-basis:100%; }
+    .notas-filtros .subtabs { display:flex; flex-wrap:wrap; width:100%; }
+    .notas-filtros .subtabs button { flex:1 1 40%; padding:.42rem .6rem; }
+  }
+
   /* ── Mails ─────────────────────────────────────────────────────────────── */
   .mail-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.3rem; align-items:stretch; }
   .mail-grid > .card { display:flex; flex-direction:column; }
@@ -607,6 +634,40 @@
       <!-- Cruce de datos (debajo del buscador, en la pestaña Socios) -->
       <div id="cruceSection" class="hide"></div>
 
+      <!-- Notas de socios: los mensajes internos que se cargan en Koha (solo lectura) -->
+      <div id="notasView" class="hide">
+        <div class="card">
+          <p class="meta" style="margin:0 0 1rem">
+            Las notas que se cargan en <b>Koha</b> en la ficha de cada socio, todas juntas.
+            Para escribir, corregir o borrar una nota se sigue usando Koha.
+          </p>
+          <div class="toolbar">
+            <input id="notasQ" type="search" placeholder="Buscar en todas las notas (ej.: kindle, duplicado, roto)…" />
+            <button id="notasBuscar">Buscar</button>
+          </div>
+          <div class="notas-filtros">
+            <div class="subtabs" id="notasTipo">
+              <button data-tipo="novedad" class="active">Novedades</button>
+              <button data-tipo="reclamo">Reclamos</button>
+              <button data-tipo="cuotas">Cuotas</button>
+              <button data-tipo="">Todas</button>
+            </div>
+            <select id="notasDias" title="Período">
+              <option value="7">Últimos 7 días</option>
+              <option value="30" selected>Últimos 30 días</option>
+              <option value="90">Últimos 3 meses</option>
+              <option value="365">Último año</option>
+              <option value="0">Todo el historial</option>
+            </select>
+            <label class="chk"><input type="checkbox" id="notasPendientes" /> Solo novedades sin resolver</label>
+            <button class="btn-refresh" id="notasRef" title="Volver a leer de Koha">↻</button>
+          </div>
+          <div id="notasMsg"></div>
+          <div id="notasLista"></div>
+          <div class="meta" id="notasPie"></div>
+        </div>
+      </div>
+
       <!-- Ficha del socio -->
       <div id="fichaView" class="card hide"></div>
 
@@ -720,7 +781,7 @@ let currentTab = "active";
 // Perfil de quien está adentro (rol, permisos y secciones). Lo trae /api/me.
 let ME = null;
 const puede = (p)=> !!(ME && ME.permisos && ME.permisos.includes(p));
-const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
+const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
 let loanSub = "todos";
 let loansAll = null;  // cache de loans_contact mientras se está en la pestaña Préstamos
 
@@ -898,7 +959,8 @@ function selectTab(tab){
   show($("enviosView"), tab==="envios");
   show($("usuariosView"), tab==="usuarios");
   show($("solicitudesView"), tab==="solicitudes");
-  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes"].includes(tab));
+  show($("notasView"), tab==="notas");
+  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas"].includes(tab));
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
   show($("cruceSection"), tab==="members");
@@ -909,19 +971,24 @@ function selectTab(tab){
   else if (tab==="estrategia") loadEstrategia();
   else if (tab==="agenda") loadAgenda();
   else if (tab==="cuotas") loadCuotas();
-  else if (tab==="loans") { loansAll=null; selectLoanView(loanSub); }
+  else if (tab==="loans") { loansAll=null; selectLoanView(loanSub);
+    refrescarAvisos().then(()=>{ if(currentTab==="loans" && loansAll) applyListFilter(); }); }
   else if (tab==="members") { $("tableWrap").innerHTML = '<p class="empty">Buscá un socio por apellido, nombre o carnet.</p>'; loadCruce(); }
+  else if (tab==="notas") { loadNotas(); }
   else if (tab==="mails") { renderRecipients(); updatePreview();
-    ensureCuotaMap().then(()=>{ updatePreview(); }); }
-  else if (tab==="auto") { loadAuto(); }
+    ensureCuotaMap().then(()=>{ updatePreview(); });
+    refrescarAvisos().then(()=>{ if(currentTab==="mails") renderRecipients(); }); }
+  else if (tab==="auto") { loadAuto(); refrescarAvisos(); }
   else if (tab==="envios") { loadEnvios(); }
   else if (tab==="usuarios") { loadUsuarios(); }
   else if (tab==="solicitudes") { loadSolicitudes(); }
 }
 function estadoBadge(v){ return Number(v)>0 ? '<span class="badge red">Vencido</span>' : '<span class="badge green">En préstamo</span>'; }
-const TODOS_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha],["Estado","dias_atraso",estadoBadge]];
-const ALDIA_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha]];
-const VENC_COLS=[["Carnet","cardnumber"],["Apellido","surname"],["Nombre","firstname"],["Teléfono","phone"],["Título","title"],["Venció","date_due",fecha],["Atraso","dias_atraso",(v)=>`<span class="badge red">${v} días</span>`]];
+// El apellido lleva 📝 si el socio tiene una novedad reciente sin resolver en Koha.
+const apellidoConNota=(v,r)=>esc(v)+iconoNota(r&&r.cardnumber);
+const TODOS_COLS=[["Carnet","cardnumber"],["Apellido","surname",apellidoConNota],["Nombre","firstname"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha],["Estado","dias_atraso",estadoBadge]];
+const ALDIA_COLS=[["Carnet","cardnumber"],["Apellido","surname",apellidoConNota],["Nombre","firstname"],["Título","title"],["Prestado","issuedate",fecha],["Vence","date_due",fecha]];
+const VENC_COLS=[["Carnet","cardnumber"],["Apellido","surname",apellidoConNota],["Nombre","firstname"],["Teléfono","phone"],["Título","title"],["Venció","date_due",fecha],["Atraso","dias_atraso",(v)=>`<span class="badge red">${v} días</span>`]];
 
 async function selectLoanView(sub){
   loanSub=sub;
@@ -994,7 +1061,7 @@ function renderTable(wrap, cols, rows, clickable){
     return `<th class="sortable" data-key="${esc(k)}">${l}${ind}</th>`;
   }).join("");
   const body=rows.map(r=>{
-    const tds=cols.map(([_,k,fmt])=>{ const v=r[k]??""; return `<td>${fmt&&v!==""?fmt(v):esc(v)}</td>`; }).join("");
+    const tds=cols.map(([_,k,fmt])=>{ const v=r[k]??""; return `<td>${fmt&&v!==""?fmt(v,r):esc(v)}</td>`; }).join("");
     const attr=clickable?` class="clickable" data-card="${esc(r.cardnumber)}"`:"";
     return `<tr${attr}>${tds}</tr>`;
   }).join("");
@@ -1004,15 +1071,22 @@ function renderTable(wrap, cols, rows, clickable){
 }
 
 // ── Ficha del socio ──
+// La ficha se abre desde la lista (Socios, Préstamos) o desde Notas: "Volver" regresa ahí.
 async function openFicha(card){
-  show($("listView"),false); show($("fichaView"),true);
+  const desdeNotas = currentTab==="notas";
+  show(desdeNotas?$("notasView"):$("listView"),false); show($("fichaView"),true);
   $("fichaView").innerHTML=LOADER;
+  window.scrollTo(0,0);
   try {
     const d=await api(`/api/members/${encodeURIComponent(card)}/profile`);
-    renderFicha(d);
+    renderFicha(d, desdeNotas);
   } catch(err){ $("fichaView").innerHTML=`<button class="btn-volver" onclick="backToList()">← Volver</button>`; msg($("panelMsg"),err.message,"error"); }
 }
-window.backToList=function(){ show($("fichaView"),false); show($("listView"),true); };
+window.backToList=function(){
+  show($("fichaView"),false);
+  show(currentTab==="notas"?$("notasView"):$("listView"),true);
+  msg($("panelMsg"),"","");
+};
 
 function tabla(cols, rows){
   if(!rows||!rows.length) return '<p class="empty">Sin registros.</p>';
@@ -1020,13 +1094,13 @@ function tabla(cols, rows){
   const body=rows.map(r=>"<tr>"+cols.map(([_,k,fmt])=>{const v=r[k]??""; return `<td>${fmt&&v!==""?fmt(v):esc(v)}</td>`;}).join("")+"</tr>").join("");
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
-function renderFicha(d){
+function renderFicha(d, desdeNotas){
   const s=d.socio;
   const contacto=[s.email,s.phone,s.mobile].filter(Boolean).join(" · ");
   const dir=[s.address,s.city].filter(Boolean).join(", ");
 
   $("fichaView").innerHTML = `
-    <button class="btn-volver" onclick="backToList()">← Volver a la lista</button>
+    <button class="btn-volver" onclick="backToList()">← ${desdeNotas?"Volver a las notas":"Volver a la lista"}</button>
     <div class="ficha-head">
       <h2>${esc(s.firstname||"")} ${esc(s.surname||"")}</h2>
       <div class="datos">
@@ -1036,6 +1110,8 @@ function renderFicha(d){
         Socio desde ${fecha(s.dateenrolled)||"—"} · vence ${fecha(s.dateexpiry)||"—"}
       </div>
     </div>
+
+    ${seccionNotasFicha(d)}
 
     <div class="seccion">
       <h3>Préstamos vigentes <span class="count">${d.prestamos_vigentes.length}</span></h3>
@@ -1048,6 +1124,156 @@ function renderFicha(d){
     </div>
   `;
 }
+
+// ── Notas de socios ───────────────────────────────────────────────────
+// Las notas se escriben en Koha; acá se leen, se clasifican (Novedad · Reclamo ·
+// Cuotas, ver app/notas.py) y una novedad se puede marcar como resuelta.
+const NOTAS = {};           // id → nota, para redibujar solo la que cambia
+let notasEstado = {tipo:"novedad", dias:30, q:"", pendientes:false};
+let notasPedido = 0;        // descarta respuestas viejas si se cambia el filtro rápido
+let notasAvisos = null;     // carnet normalizado → {cantidad, notas}; lo usan Préstamos, Mails y Automáticos
+
+function badgeNota(n){
+  const cls={novedad:"nota-novedad", reclamo:"magenta", cuotas:"gray"}[n.tipo]||"gray";
+  return `<span class="badge ${cls}">${esc(n.tipo_etiqueta)}</span>`;
+}
+function notaHTML(n, conSocio){
+  NOTAS[n.id]=n;
+  const socio = conSocio
+    ? `<span class="quien" data-card="${esc(n.cardnumber)}">${esc(n.surname)}, ${esc(n.firstname)} <small>(${esc(n.cardnumber)})</small></span>` : "";
+  const visible = n.para_socio ? ' <span class="badge navy" title="Koha también se la muestra al socio">visible para el socio</span>' : "";
+  const marca = n.resuelta ? `<div class="nota-marca">✓ Resuelta por ${esc(n.resuelta_por)} · ${fechaHora(n.resuelta_cuando)}</div>` : "";
+  const boton = n.tipo==="novedad"
+    ? `<button class="btn-sec" data-nota="${esc(n.id)}" data-con-socio="${conSocio?1:0}">${n.resuelta?"Reabrir":"Marcar resuelta"}</button>` : "";
+  return `<div class="nota${n.resuelta?" resuelta":""}" data-nota-id="${esc(n.id)}">
+    <div class="cuando">${fechaAR(n.fecha)}</div>
+    <div class="cuerpo">${socio}${badgeNota(n)}${visible}<div class="texto">${esc(n.texto)}</div>${marca}</div>
+    <div class="acciones">${boton}</div></div>`;
+}
+function esReciente(n, dias){
+  const t=new Date(String(n.fecha).replace(" ","T")).getTime();
+  return !isNaN(t) && t >= Date.now()-dias*864e5;
+}
+
+// Sección "Notas" de la ficha: novedades y reclamos a la vista; las de cuotas
+// (la mayoría, y todas iguales) se despliegan aparte para no tapar lo importante.
+function seccionNotasFicha(d){
+  if(d.notas==null)
+    return `<div class="seccion"><h3>Notas</h3><div class="msg error">${esc(d.notas_error||"No se pudieron leer las notas desde Koha.")}</div></div>`;
+  const todas=d.notas, cuotas=todas.filter(n=>n.tipo==="cuotas"), resto=todas.filter(n=>n.tipo!=="cuotas");
+  const recientes=resto.filter(n=>n.tipo==="novedad" && !n.resuelta && esReciente(n,30));
+  const aviso = recientes.length ? `<div class="notas-destacadas"><b>📝 ${recientes.length===1?"Novedad reciente":recientes.length+" novedades recientes"}</b>
+      (${fechaAR(recientes[0].fecha)}): ${esc(recientes[0].texto)}</div>` : "";
+  const lista = resto.length ? resto.map(n=>notaHTML(n,false)).join("") : '<p class="empty">Sin novedades ni reclamos.</p>';
+  const verCuotas = cuotas.length ? `<details style="margin-top:.5rem"><summary class="meta" style="cursor:pointer;margin:0">
+      Registros de cuotas (${cuotas.length})</summary>${cuotas.map(n=>notaHTML(n,false)).join("")}</details>` : "";
+  return `<div class="seccion">
+    <h3>Notas <span class="count">${todas.length}</span></h3>
+    ${todas.length ? aviso+lista+verCuotas : '<p class="empty">Este socio no tiene notas en Koha.</p>'}
+  </div>`;
+}
+
+// Vista "Notas": todas las notas de todos los socios, con filtros.
+async function loadNotas(fresh){
+  const e=notasEstado, pedido=++notasPedido;
+  const lista=$("notasLista"); lista.innerHTML=LOADER_SM; msg($("notasMsg"),"",""); $("notasPie").textContent="";
+  // Una búsqueda recorre todo el historial: buscar "kindle" solo en 30 días no sirve.
+  $("notasDias").disabled = !!e.q;
+  const p=new URLSearchParams({dias: e.q ? 0 : e.dias});
+  if(e.q) p.set("q", e.q);
+  if(e.tipo) p.set("tipo", e.tipo);
+  if(e.pendientes) p.set("pendientes", "true");
+  if(fresh) p.set("fresh", "true");
+  try {
+    const d=await api("/api/notas?"+p.toString());
+    if(pedido!==notasPedido) return;
+    const total=Object.values(d.conteo).reduce((a,b)=>a+b,0);
+    document.querySelectorAll("#notasTipo button").forEach(b=>{
+      const n = b.dataset.tipo ? d.conteo[b.dataset.tipo] : total;
+      b.textContent = `${{novedad:"Novedades",reclamo:"Reclamos",cuotas:"Cuotas","":"Todas"}[b.dataset.tipo]} (${n})`;
+    });
+    if(!d.items.length){
+      lista.innerHTML = `<p class="empty">${e.q ? "Ninguna nota tiene ese texto." : e.pendientes ? "No hay novedades sin resolver en este período." : "No hay notas de este tipo en el período."}</p>`;
+    } else {
+      lista.innerHTML = d.items.map(n=>notaHTML(n,true)).join("");
+    }
+    const partes=[`${d.items.length} nota(s)`];
+    if(e.q) partes.push(`con “${e.q}” en todo el historial`);
+    else if(d.desde) partes.push(`desde el ${fechaAR(d.desde)}`);
+    if(d.novedades_pendientes) partes.push(`${d.novedades_pendientes} novedad(es) sin resolver`);
+    $("notasPie").textContent = partes.join(" · ") +
+      (d.limite_alcanzado ? ". Se muestran solo las más nuevas: acotá el período o buscá un texto." : ".");
+  } catch(err){
+    if(pedido!==notasPedido) return;
+    lista.innerHTML=""; msg($("notasMsg"),esc(err.message),"error");
+  }
+}
+document.querySelectorAll("#notasTipo button").forEach(b=>b.addEventListener("click",()=>{
+  notasEstado.tipo=b.dataset.tipo;
+  document.querySelectorAll("#notasTipo button").forEach(x=>x.classList.toggle("active",x===b));
+  loadNotas();
+}));
+$("notasDias").addEventListener("change",()=>{ notasEstado.dias=Number($("notasDias").value); loadNotas(); });
+$("notasPendientes").addEventListener("change",()=>{ notasEstado.pendientes=$("notasPendientes").checked; loadNotas(); });
+$("notasRef").addEventListener("click",()=>loadNotas(true));
+function buscarNotas(){ notasEstado.q=$("notasQ").value.trim(); loadNotas(); }
+$("notasBuscar").addEventListener("click", buscarNotas);
+$("notasQ").addEventListener("keydown",e=>{ if(e.key==="Enter") buscarNotas(); });
+// El "x" del campo de búsqueda lo vacía: vuelve al período elegido.
+$("notasQ").addEventListener("search",()=>{ if(!$("notasQ").value && notasEstado.q){ notasEstado.q=""; loadNotas(); } });
+
+// Marcar / reabrir una novedad (en la vista Notas o en la ficha).
+document.addEventListener("click", async e=>{
+  const b=e.target.closest("button[data-nota]");
+  if(b){
+    const n=NOTAS[b.dataset.nota]; if(!n) return;
+    const restore=btnBusy(b, n.resuelta?"Reabriendo…":"Guardando…");
+    try {
+      const r=await api(`/api/notas/${encodeURIComponent(n.id)}/resuelta`,
+                        {method:"POST", body:JSON.stringify({resuelta:!n.resuelta})});
+      Object.assign(n, {resuelta:r.resuelta, resuelta_por:r.resuelta_por, resuelta_cuando:r.resuelta_cuando});
+      b.closest(".nota").outerHTML = notaHTML(n, b.dataset.conSocio==="1");
+      notasAvisos=null;                  // el 📝 de ese socio se recalcula la próxima vez
+    } catch(err){ restore(); msg($("panelMsg"),esc(err.message),"error"); }
+    return;
+  }
+  const q=e.target.closest(".nota .quien[data-card]");
+  if(q) openFicha(q.dataset.card);
+});
+
+// ── 📝 al lado del socio: novedades recientes sin resolver ──
+async function refrescarAvisos(){
+  try {
+    const d=await api("/api/notas/avisos");
+    notasAvisos={};
+    for(const [card,a] of Object.entries(d.items||{})) notasAvisos[normId(card)]=a;
+  } catch(_){ notasAvisos=notasAvisos||{}; }     // es un vistazo: si falla, no se muestra y listo
+}
+function iconoNota(card){
+  const a=notasAvisos && card!=null && notasAvisos[normId(card)];
+  if(!a) return "";
+  const titulo = a.notas[0].texto + (a.cantidad>1 ? ` (+${a.cantidad-1})` : "");
+  return `<button class="nota-ico" data-aviso="${esc(card)}" title="${esc(titulo)}" aria-label="Ver novedades del socio">📝</button>`;
+}
+document.addEventListener("click", e=>{
+  const b=e.target.closest("button[data-aviso]"); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const card=b.dataset.aviso, a=notasAvisos && notasAvisos[normId(card)]; if(!a) return;
+  const puedeAbrir = ["loans","members"].includes(currentTab);
+  const bg=document.createElement("div"); bg.className="modal-bg";
+  bg.innerHTML=`<div class="modal"><h3>📝 Novedades sin resolver</h3>
+    <p class="meta" style="margin:.1rem 0 .6rem">Carnet ${esc(card)} · de las notas de Koha, últimos días.</p>
+    ${a.notas.map(n=>`<div class="nota"><div class="cuando">${fechaAR(n.fecha)}</div>
+      <div class="cuerpo"><div class="texto" style="margin:0">${esc(n.texto)}</div></div></div>`).join("")}
+    ${a.cantidad>a.notas.length?`<p class="meta">Y ${a.cantidad-a.notas.length} más en la ficha del socio.</p>`:""}
+    <div class="row-btns">${puedeAbrir?'<button class="btn-sec" id="avFicha">Ver ficha</button>':""}
+      <button class="primary" style="width:auto;margin:0" id="avOk">Cerrar</button></div></div>`;
+  document.body.appendChild(bg);
+  const close=()=>bg.remove();
+  bg.querySelector("#avOk").onclick=close;
+  bg.onclick=ev=>{ if(ev.target===bg) close(); };
+  const f=bg.querySelector("#avFicha"); if(f) f.onclick=()=>{ close(); openFicha(card); };
+}, true);
 
 // ── Mails ─────────────────────────────────────────────────────────────
 let recipients = []; // {carnet, nombre, apellido, email, ctx?, subjectOverride?, bodyOverride?}
@@ -1119,7 +1345,7 @@ function renderRecipients(){
     `<div class="meta" style="margin-bottom:.3rem">${conEmail} con email · ${recipients.length-conEmail} sin email (se omiten)</div>` +
     recipients.map(r=>`
     <div class="recip">
-      <span class="who">${esc(r.apellido)}, ${esc(r.nombre)} <small>(${esc(r.carnet)})</small>
+      <span class="who">${esc(r.apellido)}, ${esc(r.nombre)} <small>(${esc(r.carnet)})</small>${iconoNota(r.carnet)}
         ${r.email?`<br><small>${esc(r.email)}</small>`:'<br><span class="noemail">sin email</span>'}
         ${(r.subjectOverride!=null||r.bodyOverride!=null)?'<br><span class="tag">mensaje personalizado</span>':''}
       </span>
@@ -2080,12 +2306,12 @@ async function previewAuto(){
 async function verDestinatarios(){
   const res=$("a_result"); res.innerHTML="Calculando…"; await saveAuto(true);
   try {
-    const d=await api("/api/auto/preview/"+autoSel);
+    const [d] = await Promise.all([api("/api/auto/preview/"+autoSel), notasAvisos ? null : refrescarAvisos()]);
     const arr=d.destinatarios||[];
     if(!arr.length){ res.innerHTML='<p class="empty">Ningún socio cumple los criterios ahora.</p>'; return; }
     res.innerHTML=`<div class="meta" style="margin-bottom:.4rem">Le llegaría a <b>${arr.filter(p=>!autoExcl.includes(String(p.carnet))).length}</b> de ${arr.length} · tocá "Excluir" para sacar a alguien (después Guardá).</div>
       <div class="recip-box">${arr.map(p=>{const ex=autoExcl.includes(String(p.carnet));
-        return `<div class="recip" style="${ex?'opacity:.45':''}"><span class="who">${esc(p.apellido)}, ${esc(p.nombre)} <small>(${esc(p.carnet)})</small> — venc: ${p.vencidos}, en préstamo: ${p.por_vencer}${p.debe?`, debe ${p.debe}`:''}${p.email?'':' <span class="noemail">sin email</span>'}</span>
+        return `<div class="recip" style="${ex?'opacity:.45':''}"><span class="who">${esc(p.apellido)}, ${esc(p.nombre)} <small>(${esc(p.carnet)})</small>${iconoNota(p.carnet)} — venc: ${p.vencidos}, en préstamo: ${p.por_vencer}${p.debe?`, debe ${p.debe}`:''}${p.email?'':' <span class="noemail">sin email</span>'}</span>
         <button onclick="autoToggleExcl('${esc(String(p.carnet))}',this)">${ex?'Incluir':'Excluir'}</button></div>`;}).join("")}</div>`;
   } catch(err){ res.innerHTML=`<div class="msg error">${esc(err.message)}</div>`; }
 }
