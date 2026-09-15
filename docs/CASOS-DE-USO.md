@@ -1,8 +1,8 @@
 # Casos de uso — Nuevas secciones (Comunidad)
 
 > Estado: **propuesta para validar**. Usuarios y roles, espacios y solicitudes de espacio
-> ya están en desarrollo, y las notas de socios (Módulo F) están hechas; el resto no está
-> implementado todavía.
+> ya están en desarrollo, y las notas de socios (Módulo F) y el pizarrón semanal (Módulo G)
+> están hechos; el resto no está implementado todavía.
 > Documento previo al desarrollo, pedido para acordar alcance antes de escribir código.
 
 ## 1. Contexto
@@ -627,7 +627,8 @@ cuotas", "el sábado se abre más tarde".
 3. Cada nota muestra: texto, **quién la escribió** (sale de su usuario) y cuándo, y
    opcionalmente tipo (aviso · tarea · recordatorio), día, destinataria (todas o una
    compañera) y **socio vinculado** (abre su ficha).
-4. En el Inicio de la app: *"3 notas nuevas en el pizarrón desde tu última visita"*.
+4. En el menú, junto a **Pizarrón**, un contador con las notas y respuestas que dejaron
+   las demás desde su última visita.
 
 ### CU-G2 · Dejar una nota
 1. **"Nueva nota"** → escribe el texto (lo único obligatorio) → opcional: tipo, día,
@@ -729,7 +730,7 @@ solo mediante el código del link, límite de envíos y sin mostrar nunca datos 
 | 1 | **Usuarios y roles** + menú por rol | En desarrollo | Sin esto ninguna sección nueva se puede mostrar a nadie |
 | 2 | **Calendario + solicitudes de espacio** | En desarrollo | Es el pedido más concreto y el que más se usa |
 | 3 | **Notas de socios** (ver, CU-F1 a F3) | Hecho | Chico, uso diario, reusa el acceso a Koha que ya existe |
-| 4 | **Pizarrón semanal** | — | Chico y autónomo, uso diario del equipo |
+| 4 | **Pizarrón semanal** | Hecho | Chico y autónomo, uso diario del equipo |
 | 5 | **Registro de actividades** — E·1 | — | Cuanto antes arranca, antes hay histórico; el formulario público se hace para celular desde el inicio |
 | 6 | **Versión celular** (menú inferior, tarjetas, PWA) | — | Transversal: conviene antes de sumar más pantallas |
 | 7 | **Talleres y actividades** | — | Alimenta el calendario y el registro |

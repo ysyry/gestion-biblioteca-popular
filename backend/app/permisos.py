@@ -7,7 +7,8 @@ qué, se toca solo la tabla `ROLES` de este archivo y nada más.
 Roles:
   · `bibliotecaria` — personal de la biblioteca. Entra con su usuario de Koha.
   · `comision`      — comisión directiva. Usuario propio de la app.
-                      Decisión tomada: ve lo mismo que las bibliotecarias.
+                      Decisión tomada: ve lo mismo que las bibliotecarias, menos
+                      el pizarrón semanal, que es solo del equipo de la biblioteca.
   · `subcomision`   — cultura, prensa, infantil, huerta… Usuario propio de la app.
                       Solo lo institucional: calendario, inventario y talleres para
                       mirar, y sus propias solicitudes de espacio.
@@ -28,6 +29,7 @@ INVENTARIO_EDITAR = "inventario.editar"
 TALLERES_VER = "talleres.ver"
 TALLERES_EDITAR = "talleres.editar"
 USUARIOS_ADMIN = "usuarios.admin"
+PIZARRON = "pizarron"                      # el pizarrón semanal del equipo de la biblioteca
 
 _TODO = {
     KOHA, MAILS,
@@ -39,7 +41,9 @@ _TODO = {
 }
 
 ROLES: dict[str, set[str]] = {
-    "bibliotecaria": set(_TODO),
+    # El pizarrón es la única excepción a "la comisión ve lo mismo que las
+    # bibliotecarias" (decisión tomada): es el espacio de trabajo del equipo.
+    "bibliotecaria": _TODO | {PIZARRON},
     "comision": set(_TODO),
     "subcomision": {
         CALENDARIO_VER,
@@ -74,6 +78,7 @@ def puede(rol: str, permiso: str) -> bool:
 # `movil`: si va en la barra de abajo del celular (el resto queda en "Más").
 SECCIONES: list[dict] = [
     {"id": "stats",      "titulo": "Inicio",      "permiso": KOHA,           "movil": True},
+    {"id": "pizarron",   "titulo": "Pizarrón",    "permiso": PIZARRON,       "movil": True},
     {"id": "loans",      "titulo": "Préstamos",   "permiso": KOHA,           "movil": True},
     # La ficha y las notas de los socios, juntas: una nota lleva a la ficha y viceversa.
     {"id": "members",    "titulo": "Buscar",      "permiso": KOHA, "grupo": "Socios", "movil": True},

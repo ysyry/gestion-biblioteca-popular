@@ -176,9 +176,11 @@ def test_registrar_acceso(store):
 
 
 # ── Permisos ────────────────────────────────────────────────────────────────
-def test_bibliotecaria_y_comision_pueden_lo_mismo():
-    """Decisión tomada: la comisión directiva ve lo mismo que las bibliotecarias."""
-    assert permisos.permisos_de("bibliotecaria") == permisos.permisos_de("comision")
+def test_bibliotecaria_y_comision_pueden_lo_mismo_salvo_el_pizarron():
+    """Decisiones tomadas: la comisión directiva ve lo mismo que las bibliotecarias,
+    con una sola excepción: el pizarrón semanal, que es del equipo de la biblioteca."""
+    diferencia = permisos.permisos_de("bibliotecaria") ^ permisos.permisos_de("comision")
+    assert diferencia == {permisos.PIZARRON}
 
 
 @pytest.mark.parametrize("permiso", [permisos.KOHA, permisos.MAILS,
@@ -228,7 +230,7 @@ def test_menu_agrupa_envios():
 def test_menu_deja_sueltas_las_que_no_tienen_grupo():
     menu = permisos.menu_de("bibliotecaria")
     sueltas = [e["id"] for e in menu if e["tipo"] == "seccion"]
-    assert sueltas == ["stats", "loans", "cuotas", "usuarios"]
+    assert sueltas == ["stats", "pizarron", "loans", "cuotas", "usuarios"]
 
 
 def test_menu_agrupa_socios_y_notas():

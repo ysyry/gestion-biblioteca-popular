@@ -475,7 +475,59 @@
   .notas-filtros select { width:auto; padding:.45rem .6rem; font-size:.86rem; }
   .nota-ico { background:none; border:none; padding:0 .15rem; margin-left:.25rem; cursor:pointer;
           font-size:.95rem; line-height:1; vertical-align:-.05em; }
+  /* ── Pizarrón semanal ──────────────────────────────────────────────────── */
+  .piz-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.55rem; margin-bottom:1rem; }
+  .piz-toolbar .btn-sec { padding:.45rem .8rem; }
+  .piz-semana { display:flex; flex-direction:column; min-width:15rem; margin:0 .3rem; }
+  .piz-semana b { color:var(--navy); font-size:1.02rem; }
+  .piz-semana small { color:var(--muted); font-size:.78rem; }
+  .piz-toolbar input[type=search] { flex:1; min-width:180px; width:auto; padding:.5rem .7rem; }
+  .piz-toolbar .primary { width:auto; margin:0; padding:.55rem 1rem; }
+  .piz-bloque { margin-top:1.2rem; }
+  .piz-bloque h4 { margin:0 0 .6rem; color:var(--navy); font-size:.92rem; display:inline-flex; gap:.45rem; align-items:center; }
+  details.piz-bloque summary { cursor:pointer; }
+  .piz-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:.85rem; }
+  .postit { border:1px solid; border-radius:10px; padding:.8rem .9rem; display:flex; flex-direction:column;
+          gap:.4rem; box-shadow:0 2px 5px rgba(20,30,60,.07); }
+  .postit.amarillo { background:#fff8d9; border-color:#f0dd8e; }
+  .postit.rosa     { background:#fde8f0; border-color:#f2bfd2; }
+  .postit.verde    { background:#e5f6ed; border-color:#b8e3cb; }
+  .postit.celeste  { background:#e4f1fb; border-color:#b8d7ee; }
+  .postit.lila     { background:#f1eafb; border-color:#d4c2f0; }
+  .postit.hecha .piz-texto { text-decoration:line-through; color:var(--muted); }
+  .postit.hoy { box-shadow:0 0 0 2px var(--red), 0 2px 5px rgba(20,30,60,.07); }
+  .piz-chips { display:flex; flex-wrap:wrap; gap:.3rem .45rem; align-items:center; font-size:.76rem; }
+  .piz-para { font-weight:600; color:var(--navy); }
+  .piz-para.mia { color:var(--magenta); }
+  .piz-viene { color:#8a5a00; font-style:italic; }
+  .piz-texto { white-space:pre-wrap; word-break:break-word; font-size:.92rem; line-height:1.45; }
+  .piz-socio { align-self:flex-start; background:rgba(255,255,255,.7); border:1px solid rgba(0,0,0,.08);
+          border-radius:999px; padding:.15rem .6rem; font-size:.78rem; cursor:pointer; font-family:inherit; color:var(--navy); }
+  .piz-socio:hover { color:var(--magenta); }
+  .piz-hecha { font-size:.76rem; color:var(--green); }
+  .piz-resps { border-top:1px dashed rgba(0,0,0,.14); padding-top:.35rem; display:flex; flex-direction:column; gap:.2rem; }
+  .piz-resp { font-size:.82rem; line-height:1.4; }
+  .piz-x { background:none; border:none; color:var(--muted); cursor:pointer; font-size:.95rem; padding:0 .2rem; }
+  .piz-pie { font-size:.72rem; color:var(--muted); margin-top:auto; }
+  .piz-acciones { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .piz-acciones .btn-sec { font-size:.74rem; padding:.22rem .55rem; background:rgba(255,255,255,.75); }
+  .piz-resp-form { display:flex; gap:.35rem; }
+  .piz-resp-form input { padding:.35rem .55rem; font-size:.84rem; }
+  .piz-resp-form .btn-sec { font-size:.78rem; padding:.3rem .6rem; }
+  .piz-form { margin-bottom:1rem; }
+  .piz-form-fila { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.2rem .8rem; }
+  .piz-form-fila label { margin-top:.5rem; }
+  .piz-colores { display:flex; gap:.4rem; padding-top:.6rem; }
+  .piz-color { width:26px; height:26px; border-radius:50%; border:2px solid rgba(0,0,0,.12); cursor:pointer; padding:0; }
+  .piz-color.amarillo { background:#fff1a8; } .piz-color.rosa { background:#f8c6d9; }
+  .piz-color.verde { background:#bfe8d0; } .piz-color.celeste { background:#bfdcf3; } .piz-color.lila { background:#dccbf5; }
+  .piz-color.activo { border-color:var(--navy); box-shadow:inset 0 0 0 2px #fff; }
+  .menu-badge { background:var(--red); color:#fff; border-radius:999px; font-size:.68rem; font-weight:700;
+          padding:.05rem .45rem; margin-left:.45rem; }
+
   @media (max-width:680px){
+    .piz-semana { min-width:0; flex:1; }
+    .piz-grid { grid-template-columns:1fr; }
     .nota { flex-wrap:wrap; gap:.3rem .9rem; } .nota .cuando, .nota .acciones { flex-basis:100%; }
     .notas-filtros .subtabs { display:flex; flex-wrap:wrap; width:100%; }
     .notas-filtros .subtabs button { flex:1 1 40%; padding:.42rem .6rem; }
@@ -634,6 +686,23 @@
       <!-- Cruce de datos (debajo del buscador, en la pestaña Socios) -->
       <div id="cruceSection" class="hide"></div>
 
+      <!-- Pizarrón semanal de las bibliotecarias -->
+      <div id="pizarronView" class="hide">
+        <div class="card">
+          <div class="piz-toolbar">
+            <button class="btn-sec" id="pizPrev" title="Semana anterior">‹</button>
+            <div class="piz-semana"><b id="pizTitulo">Pizarrón</b><small id="pizSub"></small></div>
+            <button class="btn-sec" id="pizNext" title="Semana siguiente">›</button>
+            <button class="btn-sec" id="pizHoy">Esta semana</button>
+            <input type="search" id="pizQ" placeholder="Buscar en el pizarrón…" />
+            <button class="primary" id="pizNueva">+ Nueva nota</button>
+          </div>
+          <div id="pizMsg"></div>
+          <div id="pizForm" class="hide"></div>
+          <div id="pizContenido"></div>
+        </div>
+      </div>
+
       <!-- Notas de socios: los mensajes internos que se cargan en Koha (solo lectura) -->
       <div id="notasView" class="hide">
         <div class="card">
@@ -781,7 +850,7 @@ let currentTab = "active";
 // Perfil de quien está adentro (rol, permisos y secciones). Lo trae /api/me.
 let ME = null;
 const puede = (p)=> !!(ME && ME.permisos && ME.permisos.includes(p));
-const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
+const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", pizarron:"Pizarrón de la semana", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
 let loanSub = "todos";
 let loansAll = null;  // cache de loans_contact mientras se está en la pestaña Préstamos
 
@@ -902,6 +971,7 @@ async function enterApp(){
   show($("claveBtn"), !ME.es_de_koha);
 
   renderMenu();
+  chequearNovedadesPizarron();
   const secs=ME.secciones||[];
   if(secs.length) selectTab(secs[0].id);
   else msg($("panelMsg"),"Tu usuario todavía no tiene ninguna sección asignada. Avisale a la biblioteca.","error");
@@ -960,7 +1030,8 @@ function selectTab(tab){
   show($("usuariosView"), tab==="usuarios");
   show($("solicitudesView"), tab==="solicitudes");
   show($("notasView"), tab==="notas");
-  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas"].includes(tab));
+  show($("pizarronView"), tab==="pizarron");
+  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas","pizarron"].includes(tab));
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
   show($("cruceSection"), tab==="members");
@@ -975,6 +1046,7 @@ function selectTab(tab){
     refrescarAvisos().then(()=>{ if(currentTab==="loans" && loansAll) applyListFilter(); }); }
   else if (tab==="members") { $("tableWrap").innerHTML = '<p class="empty">Buscá un socio por apellido, nombre o carnet.</p>'; loadCruce(); }
   else if (tab==="notas") { loadNotas(); }
+  else if (tab==="pizarron") { cerrarPizForm(); $("pizQ").value=""; PIZ.q=""; loadPizarron(null); }
   else if (tab==="mails") { renderRecipients(); updatePreview();
     ensureCuotaMap().then(()=>{ updatePreview(); });
     refrescarAvisos().then(()=>{ if(currentTab==="mails") renderRecipients(); }); }
@@ -1071,20 +1143,23 @@ function renderTable(wrap, cols, rows, clickable){
 }
 
 // ── Ficha del socio ──
-// La ficha se abre desde la lista (Socios, Préstamos) o desde Notas: "Volver" regresa ahí.
+// La ficha se abre desde la lista (Socios, Préstamos), desde Notas o desde el Pizarrón:
+// "Volver" regresa a donde se estaba.
+const FICHA_DESDE = { notas:["notasView","Volver a las notas"], pizarron:["pizarronView","Volver al pizarrón"] };
+function origenFicha(){ return FICHA_DESDE[currentTab] || ["listView","Volver a la lista"]; }
 async function openFicha(card){
-  const desdeNotas = currentTab==="notas";
-  show(desdeNotas?$("notasView"):$("listView"),false); show($("fichaView"),true);
+  const [vista, volver] = origenFicha();
+  show($(vista),false); show($("fichaView"),true);
   $("fichaView").innerHTML=LOADER;
   window.scrollTo(0,0);
   try {
     const d=await api(`/api/members/${encodeURIComponent(card)}/profile`);
-    renderFicha(d, desdeNotas);
+    renderFicha(d, volver);
   } catch(err){ $("fichaView").innerHTML=`<button class="btn-volver" onclick="backToList()">← Volver</button>`; msg($("panelMsg"),err.message,"error"); }
 }
 window.backToList=function(){
   show($("fichaView"),false);
-  show(currentTab==="notas"?$("notasView"):$("listView"),true);
+  show($(origenFicha()[0]),true);
   msg($("panelMsg"),"","");
 };
 
@@ -1094,13 +1169,13 @@ function tabla(cols, rows){
   const body=rows.map(r=>"<tr>"+cols.map(([_,k,fmt])=>{const v=r[k]??""; return `<td>${fmt&&v!==""?fmt(v):esc(v)}</td>`;}).join("")+"</tr>").join("");
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
-function renderFicha(d, desdeNotas){
+function renderFicha(d, volver){
   const s=d.socio;
   const contacto=[s.email,s.phone,s.mobile].filter(Boolean).join(" · ");
   const dir=[s.address,s.city].filter(Boolean).join(", ");
 
   $("fichaView").innerHTML = `
-    <button class="btn-volver" onclick="backToList()">← ${desdeNotas?"Volver a las notas":"Volver a la lista"}</button>
+    <button class="btn-volver" onclick="backToList()">← ${esc(volver||"Volver a la lista")}</button>
     <div class="ficha-head">
       <h2>${esc(s.firstname||"")} ${esc(s.surname||"")}</h2>
       <div class="datos">
@@ -1124,6 +1199,256 @@ function renderFicha(d, desdeNotas){
     </div>
   `;
 }
+
+// ── Pizarrón semanal ──────────────────────────────────────────────────
+// Avisos, tareas y recordatorios del equipo, por semana. Las tareas sin hacer pasan
+// solas a la semana siguiente (lo calcula el backend, ver app/pizarron.py).
+const PIZ = { semana:null, datos:null, q:"", resultados:[] };
+const PIZ_COLORES = { amarillo:"Amarillo", rosa:"Rosa", verde:"Verde", celeste:"Celeste", lila:"Lila" };
+
+function isoLocal(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function diaDe(iso){ const [y,m,d]=String(iso).slice(0,10).split("-").map(Number); return new Date(y,m-1,d); }
+function sumarDias(iso, n){ const d=diaDe(iso); d.setDate(d.getDate()+n); return isoLocal(d); }
+function cortoDM(iso){ const d=diaDe(iso); return `${d.getDate()}/${d.getMonth()+1}`; }
+function nombreDia(iso){
+  const d=diaDe(iso), s=d.toLocaleDateString("es-AR",{weekday:"long"});
+  return `${s.charAt(0).toUpperCase()+s.slice(1)} ${d.getDate()}/${d.getMonth()+1}`;
+}
+function tituloSemana(desde, hasta){
+  const a=diaDe(desde), b=diaDe(hasta), mes=d=>d.toLocaleDateString("es-AR",{month:"long"});
+  return a.getMonth()===b.getMonth()
+    ? `Semana del ${a.getDate()} al ${b.getDate()} de ${mes(b)}`
+    : `Semana del ${a.getDate()} de ${mes(a)} al ${b.getDate()} de ${mes(b)}`;
+}
+function mismoUsuario(u){ return !!ME && String(u||"").trim().toLowerCase()===String(ME.username||"").trim().toLowerCase(); }
+
+async function loadPizarron(semana, {silencioso=false}={}){
+  if(semana!==undefined) PIZ.semana=semana;
+  if(!silencioso){ $("pizContenido").innerHTML=LOADER_SM; msg($("pizMsg"),"",""); }
+  try {
+    const d=await api("/api/pizarron"+(PIZ.semana?`?semana=${encodeURIComponent(PIZ.semana)}`:""));
+    if(PIZ.q) return;                    // mientras tanto se puso a buscar: no pisar los resultados
+    PIZ.datos=d; PIZ.semana=d.semana;
+    renderPizarron();
+    marcarNovedadesPizarron(0);          // abrir el pizarrón cuenta como visita
+  } catch(err){
+    if(!silencioso){ $("pizContenido").innerHTML=""; msg($("pizMsg"),esc(err.message),"error"); }
+  }
+}
+
+function renderPizarron(){
+  const d=PIZ.datos; if(!d) return;
+  const pasada = d.semana < d.actual;
+  $("pizTitulo").textContent = tituloSemana(d.semana, d.hasta);
+  $("pizSub").textContent = d.semana===d.actual ? "Esta semana" : pasada ? "Semana pasada · solo lectura" : "Semana próxima";
+  show($("pizNueva"), !pasada);
+  $("pizHoy").disabled = d.semana===d.actual;
+  const ctx={lectura:pasada, hoy:d.hoy};
+  const bloques=[];
+  if(d.fijadas.length) bloques.push(bloquePiz("📌 Fijadas", d.fijadas, ctx));
+  bloques.push(bloquePiz("Toda la semana", d.general, ctx,
+    pasada ? "No quedó nada anotado para toda la semana." : "Nada anotado para toda la semana. Usá “+ Nueva nota”."));
+  for(const g of d.dias)
+    bloques.push(bloquePiz(esc(nombreDia(g.fecha))+(g.fecha===d.hoy?' <span class="badge magenta">Hoy</span>':""), g.items, ctx));
+  if(d.hechas.length)
+    bloques.push(`<details class="piz-bloque"><summary><h4>✓ Tareas hechas esta semana (${d.hechas.length})</h4></summary>
+      <div class="piz-grid">${d.hechas.map(n=>postit(n,ctx)).join("")}</div></details>`);
+  $("pizContenido").innerHTML=bloques.join("");
+}
+function bloquePiz(titulo, items, ctx, vacio){
+  if(!items.length && !vacio) return "";
+  return `<section class="piz-bloque"><h4>${titulo}</h4>${items.length
+    ? `<div class="piz-grid">${items.map(n=>postit(n,ctx)).join("")}</div>` : `<p class="empty">${esc(vacio)}</p>`}</section>`;
+}
+function postit(n, ctx){
+  const hoyRec = n.tipo==="recordatorio" && n.dia===ctx.hoy;
+  const chips=[`<span class="badge ${{tarea:"navy",recordatorio:"magenta"}[n.tipo]||"gray"}">${esc(n.tipo_etiqueta)}</span>`];
+  if(n.fijada) chips.push('<span title="Fijada arriba">📌</span>');
+  if(n.para) chips.push(`<span class="piz-para${n.para_mi?" mia":""}">Para ${n.para_mi?"vos":esc(n.para)}</span>`);
+  if(hoyRec) chips.push('<span class="badge red">Hoy</span>');
+  if(n.viene_de) chips.push(`<span class="piz-viene">Viene de la semana del ${cortoDM(n.viene_de)}</span>`);
+  if(ctx.buscando) chips.push(`<span class="piz-viene">Semana del ${cortoDM(n.semana)}</span>`);
+  const socio = n.socio ? `<button class="piz-socio" data-piz-socio="${esc(n.socio.cardnumber)}">👤 ${esc(n.socio.nombre||"Socio")} (${esc(n.socio.cardnumber)})</button>` : "";
+  const hecha = n.hecha ? `<div class="piz-hecha">✓ Hecha por ${esc(n.hecha.nombre)} · ${fechaHora(n.hecha.cuando)}</div>` : "";
+  const resps = (n.respuestas||[]).map(r=>`<div class="piz-resp"><b>${esc(r.autor.nombre)}:</b> ${esc(r.texto)}${
+      !ctx.lectura && !ctx.buscando && mismoUsuario(r.autor.usuario)
+        ? `<button class="piz-x" data-piz="${esc(n.id)}" data-piz-borrar-resp="${esc(r.id)}" title="Borrar mi respuesta">×</button>` : ""}</div>`).join("");
+  const acc=[];
+  if(ctx.buscando) acc.push(`<button class="btn-sec" data-piz-ir="${esc(n.semana)}">Ir a esa semana</button>`);
+  else if(!ctx.lectura){
+    if(n.tipo==="tarea") acc.push(`<button class="btn-sec" data-piz-hecha="${esc(n.id)}">${n.hecha?"Desmarcar":"✓ Hecha"}</button>`);
+    acc.push(`<button class="btn-sec" data-piz-responder="${esc(n.id)}">Responder</button>`);
+    if(n.puede_editar){
+      acc.push(`<button class="btn-sec" data-piz-editar="${esc(n.id)}">Editar</button>`);
+      acc.push(`<button class="btn-sec danger" data-piz-borrar="${esc(n.id)}">Borrar</button>`);
+    }
+  }
+  return `<article class="postit ${esc(n.color||"amarillo")}${n.hecha?" hecha":""}${hoyRec?" hoy":""}">
+    <div class="piz-chips">${chips.join("")}</div>
+    <div class="piz-texto">${esc(n.texto)}</div>${socio}${hecha}
+    ${resps?`<div class="piz-resps">${resps}</div>`:""}
+    <div class="piz-pie">${esc(n.autor.nombre)} · ${fechaHora(n.creada)}${n.editada?" · editada":""}</div>
+    ${acc.length?`<div class="piz-acciones">${acc.join("")}</div>`:""}
+    <div class="piz-responder hide"></div>
+  </article>`;
+}
+function notaPiz(id){
+  const d=PIZ.datos||{};
+  const todas=[...(d.fijadas||[]), ...(d.general||[]), ...(d.hechas||[]),
+               ...((d.dias||[]).flatMap(g=>g.items)), ...(PIZ.resultados||[])];
+  return todas.find(n=>n.id===id);
+}
+
+// Alta y edición. El día se elige dentro de la semana que se está mirando.
+function pizFormulario(n){
+  const d=PIZ.datos; if(!d) return;
+  const v = n || {texto:"", tipo:"aviso", dia:null, para:"", socio:null, color:"amarillo", fijada:false};
+  const dias=[...Array(7)].map((_,i)=>sumarDias(d.semana,i));
+  const f=$("pizForm");
+  f.innerHTML=`<div class="piz-form postit ${esc(v.color)}">
+    <h4 style="margin:0;color:var(--navy)">${n?"Editar nota":"Nueva nota"}</h4>
+    <textarea id="pizTexto" rows="3" maxlength="2000" placeholder="Escribí el aviso, la tarea o el recordatorio…">${esc(v.texto)}</textarea>
+    <div class="piz-form-fila">
+      <div><label>Tipo</label><select id="pizTipo">${Object.entries(d.tipos).map(([k,t])=>
+        `<option value="${esc(k)}"${k===v.tipo?" selected":""}>${esc(t)}</option>`).join("")}</select></div>
+      <div><label>Día</label><select id="pizDia"><option value="">Toda la semana</option>${dias.map(x=>
+        `<option value="${x}"${x===v.dia?" selected":""}>${esc(nombreDia(x))}</option>`).join("")}</select></div>
+      <div><label>Para</label><input id="pizPara" list="pizPersonas" placeholder="Todas" value="${esc(v.para)}" maxlength="80" />
+        <datalist id="pizPersonas">${(d.personas||[]).map(p=>`<option value="${esc(p)}"></option>`).join("")}</datalist></div>
+      <div><label>Socio (carnet, opcional)</label><input id="pizSocio" placeholder="Ej.: 2941" value="${esc(v.socio?v.socio.cardnumber:"")}" /></div>
+    </div>
+    <div class="piz-form-fila" style="align-items:end">
+      <div class="piz-colores">${d.colores.map(c=>`<button type="button" class="piz-color ${esc(c)}${c===v.color?" activo":""}" data-color="${esc(c)}" title="${esc(PIZ_COLORES[c]||c)}"></button>`).join("")}</div>
+      <label class="chk"><input type="checkbox" id="pizFijada"${v.fijada?" checked":""} /> 📌 Fijar arriba (sigue en las semanas siguientes)</label>
+    </div>
+    <div class="row-btns" style="margin-top:.4rem"><button class="btn-sec" id="pizCancelar">Cancelar</button>
+      <button class="primary" style="width:auto;margin:0" id="pizGuardar">Guardar</button></div>
+  </div>`;
+  show(f,true);
+  f.querySelectorAll(".piz-color").forEach(b=>b.addEventListener("click",()=>{
+    f.querySelectorAll(".piz-color").forEach(x=>x.classList.toggle("activo",x===b));
+    f.querySelector(".piz-form").className=`piz-form postit ${b.dataset.color}`;
+  }));
+  $("pizCancelar").onclick=cerrarPizForm;
+  $("pizGuardar").onclick=()=>pizGuardar(n);
+  $("pizTexto").focus();
+}
+function cerrarPizForm(){ const f=$("pizForm"); show(f,false); f.innerHTML=""; }
+async function pizGuardar(n){
+  const restore=btnBusy($("pizGuardar"),"Guardando…");
+  msg($("pizMsg"),"","");
+  try {
+    const activo=$("pizForm").querySelector(".piz-color.activo");
+    const body={ texto:$("pizTexto").value, tipo:$("pizTipo").value, dia:$("pizDia").value||null,
+                 para:$("pizPara").value, color:activo?activo.dataset.color:"amarillo",
+                 fijada:$("pizFijada").checked, semana:PIZ.datos.semana, socio:null };
+    const card=$("pizSocio").value.trim();
+    if(card){
+      if(n && n.socio && normId(n.socio.cardnumber)===normId(card)) body.socio=n.socio;
+      else {
+        const res=await api("/api/members?q="+encodeURIComponent(card));
+        const s=(res||[]).find(x=>normId(x.cardnumber)===normId(card));
+        if(!s) throw new Error(`No encontré el carnet ${card} en Koha.`);
+        body.socio={cardnumber:s.cardnumber, nombre:`${s.surname}, ${s.firstname}`};
+      }
+    }
+    if(n) await api(`/api/pizarron/${encodeURIComponent(n.id)}`,{method:"PUT", body:JSON.stringify(body)});
+    else  await api("/api/pizarron",{method:"POST", body:JSON.stringify(body)});
+    cerrarPizForm();
+    await loadPizarron(undefined,{silencioso:true});
+  } catch(err){ restore(); msg($("pizMsg"),esc(err.message),"error"); }
+}
+
+function abrirRespuesta(tarjeta, id){
+  const box=tarjeta.querySelector(".piz-responder");
+  if(!box.classList.contains("hide")){ box.classList.add("hide"); box.innerHTML=""; return; }
+  box.innerHTML='<div class="piz-resp-form"><input placeholder="Respuesta corta…" maxlength="500" /><button class="btn-sec">Enviar</button></div>';
+  box.classList.remove("hide");
+  const inp=box.querySelector("input"), b=box.querySelector("button");
+  const enviar=async()=>{
+    if(!inp.value.trim()) return;
+    const restore=btnBusy(b,"…");
+    try {
+      await api(`/api/pizarron/${encodeURIComponent(id)}/respuestas`,{method:"POST", body:JSON.stringify({texto:inp.value})});
+      await loadPizarron(undefined,{silencioso:true});
+    } catch(err){ restore(); msg($("pizMsg"),esc(err.message),"error"); }
+  };
+  b.onclick=enviar;
+  inp.onkeydown=e=>{ if(e.key==="Enter") enviar(); };
+  inp.focus();
+}
+
+$("pizarronView").addEventListener("click", async e=>{
+  const t=e.target.closest("button"); if(!t) return;
+  const ds=t.dataset;
+  if(ds.pizEditar){ pizFormulario(notaPiz(ds.pizEditar)); window.scrollTo({top:0, behavior:"smooth"}); return; }
+  if(ds.pizResponder){ abrirRespuesta(t.closest(".postit"), ds.pizResponder); return; }
+  if(ds.pizSocio){ openFicha(ds.pizSocio); return; }
+  if(ds.pizIr){ $("pizQ").value=""; PIZ.q=""; loadPizarron(ds.pizIr); return; }
+  let restore=()=>{};
+  try {
+    if(ds.pizHecha){
+      const n=notaPiz(ds.pizHecha); restore=btnBusy(t,"…");
+      await api(`/api/pizarron/${encodeURIComponent(n.id)}/hecha`,{method:"POST", body:JSON.stringify({hecha:!n.hecha})});
+    } else if(ds.pizBorrar){
+      if(!await uiConfirm({title:"Borrar nota", message:"Se borra del pizarrón para todas. ¿Seguro?", ok:"Borrar", danger:true})) return;
+      restore=btnBusy(t,"…");
+      await api(`/api/pizarron/${encodeURIComponent(ds.pizBorrar)}`,{method:"DELETE"});
+    } else if(ds.pizBorrarResp){
+      restore=btnBusy(t,"…");
+      await api(`/api/pizarron/${encodeURIComponent(ds.piz)}/respuestas/${encodeURIComponent(ds.pizBorrarResp)}`,{method:"DELETE"});
+    } else return;
+    await loadPizarron(undefined,{silencioso:true});
+  } catch(err){ restore(); msg($("pizMsg"),esc(err.message),"error"); }
+});
+
+async function buscarPizarron(){
+  const q=$("pizQ").value.trim();
+  PIZ.q=q; cerrarPizForm();
+  if(!q){ loadPizarron(); return; }
+  $("pizContenido").innerHTML=LOADER_SM; msg($("pizMsg"),"","");
+  try {
+    const d=await api("/api/pizarron/buscar?q="+encodeURIComponent(q));
+    PIZ.resultados=d.items;
+    $("pizSub").textContent=`Búsqueda: “${q}” · ${d.items.length} nota(s) de los últimos años`;
+    show($("pizNueva"),false);
+    $("pizContenido").innerHTML = d.items.length
+      ? `<div class="piz-grid" style="margin-top:1rem">${d.items.map(n=>postit(n,{buscando:true, hoy:PIZ.datos&&PIZ.datos.hoy})).join("")}</div>`
+      : '<p class="empty">Ninguna nota del pizarrón tiene ese texto.</p>';
+  } catch(err){ $("pizContenido").innerHTML=""; msg($("pizMsg"),esc(err.message),"error"); }
+}
+$("pizPrev").addEventListener("click",()=>{ if(!PIZ.semana) return; cerrarPizForm(); $("pizQ").value=""; PIZ.q=""; loadPizarron(sumarDias(PIZ.semana,-7)); });
+$("pizNext").addEventListener("click",()=>{ if(!PIZ.semana) return; cerrarPizForm(); $("pizQ").value=""; PIZ.q=""; loadPizarron(sumarDias(PIZ.semana,7)); });
+$("pizHoy").addEventListener("click",()=>{ cerrarPizForm(); $("pizQ").value=""; PIZ.q=""; loadPizarron(null); });
+$("pizNueva").addEventListener("click",()=>pizFormulario(null));
+$("pizQ").addEventListener("keydown",e=>{ if(e.key==="Enter") buscarPizarron(); });
+$("pizQ").addEventListener("search",()=>{ if(!$("pizQ").value && PIZ.q) buscarPizarron(); });
+
+// Contador en el menú: notas y respuestas de otras desde la última visita.
+function marcarNovedadesPizarron(n){
+  const b=document.querySelector('#tabs button[data-tab="pizarron"]'); if(!b) return;
+  let s=b.querySelector(".menu-badge");
+  if(!n){ if(s) s.remove(); b.removeAttribute("title"); return; }
+  if(!s){ s=document.createElement("span"); s.className="menu-badge"; b.appendChild(s); }
+  s.textContent = n>99 ? "99+" : String(n);
+  b.title=`${n} novedad(es) en el pizarrón desde tu última visita`;
+}
+async function chequearNovedadesPizarron(){
+  if(!token || !puede("pizarron")) return;
+  try {
+    const d=await api("/api/pizarron/novedades");
+    marcarNovedadesPizarron(currentTab==="pizarron" ? 0 : d.nuevas);
+  } catch(_){}
+}
+// Cada minuto: si el pizarrón está abierto (y nadie está escribiendo), se actualiza;
+// si no, se actualiza el contador del menú.
+setInterval(()=>{
+  if(!token || !ME || !puede("pizarron")) return;
+  if(currentTab!=="pizarron"){ chequearNovedadesPizarron(); return; }
+  const ocupada = !$("pizForm").classList.contains("hide") || PIZ.q || $("pizarronView").classList.contains("hide")
+    || document.querySelector("#pizarronView .piz-responder:not(.hide)");
+  if(!ocupada) loadPizarron(undefined,{silencioso:true});
+}, 60000);
 
 // ── Notas de socios ───────────────────────────────────────────────────
 // Las notas se escriben en Koha; acá se leen, se clasifican (Novedad · Reclamo ·

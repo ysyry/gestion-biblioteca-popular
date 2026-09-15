@@ -31,6 +31,7 @@ from .. import cache
 from .. import espacios
 from .. import notas
 from .. import permisos
+from .. import pizarron
 from .. import solicitudes
 from .. import usuarios
 from ..config import settings
@@ -170,6 +171,95 @@ async def password_propia(body: dict = Body(...), s: Sesion = Depends(get_sessio
     except usuarios.ErrorUsuario as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True}
+
+
+# ── Pizarrón semanal (solo bibliotecarias) ────────────────────────────────────
+def _pizarron_error(exc: pizarron.ErrorPizarron) -> HTTPException:
+    if isinstance(exc, pizarron.SinPermiso):
+        return HTTPException(status_code=403, detail=str(exc))
+    if isinstance(exc, pizarron.NoEncontrada):
+        return HTTPException(status_code=404, detail=str(exc))
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/pizarron", tags=["pizarron"])
+async def pizarron_semana(semana: str | None = Query(None, description="Cualquier día de la semana (AAAA-MM-DD)"),
+                          s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    """La semana del pizarrón: fijadas, notas generales, por día y tareas hechas."""
+    try:
+        d = pizarron.semana(semana, s.usuario, s.nombre)
+    except pizarron.ErrorPizarron as exc:
+        raise _pizarron_error(exc) from exc
+    pizarron.registrar_visita(s.usuario, s.nombre)
+    return d
+
+
+@router.get("/pizarron/novedades", tags=["pizarron"])
+async def pizarron_novedades(s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    """Cuántas notas y respuestas de otras dejaron desde la última visita (para el menú)."""
+    return {"nuevas": pizarron.novedades(s.usuario)}
+
+
+@router.get("/pizarron/buscar", tags=["pizarron"])
+async def pizarron_buscar(q: str = Query(..., min_length=1, max_length=100),
+                          s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    return {"items": pizarron.buscar(q, s.usuario, s.nombre)}
+
+
+@router.post("/pizarron", tags=["pizarron"])
+async def pizarron_crear(body: dict = Body(...), s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    try:
+        return pizarron.crear(body or {}, s.usuario, s.nombre)
+    except pizarron.ErrorPizarron as exc:
+        raise _pizarron_error(exc) from exc
+
+
+@router.put("/pizarron/{nota_id}", tags=["pizarron"])
+async def pizarron_editar(nota_id: str, body: dict = Body(...),
+                          s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    """Editar: solo quien la escribió."""
+    try:
+        return pizarron.editar(nota_id, body or {}, s.usuario)
+    except pizarron.ErrorPizarron as exc:
+        raise _pizarron_error(exc) from exc
+
+
+@router.delete("/pizarron/{nota_id}", tags=["pizarron"])
+async def pizarron_borrar(nota_id: str, s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    """Borrar: solo quien la escribió."""
+    try:
+        pizarron.borrar(nota_id, s.usuario)
+    except pizarron.ErrorPizarron as exc:
+        raise _pizarron_error(exc) from exc
+    return {"ok": True}
+
+
+@router.post("/pizarron/{nota_id}/hecha", tags=["pizarron"])
+async def pizarron_hecha(nota_id: str, body: dict = Body(default={}),
+                         s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    """Tildar (o destildar con {"hecha": false}) una tarea. Cualquiera del equipo."""
+    try:
+        return pizarron.marcar_hecha(nota_id, bool((body or {}).get("hecha", True)), s.usuario, s.nombre)
+    except pizarron.ErrorPizarron as exc:
+        raise _pizarron_error(exc) from exc
+
+
+@router.post("/pizarron/{nota_id}/respuestas", tags=["pizarron"])
+async def pizarron_responder(nota_id: str, body: dict = Body(...),
+                             s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    try:
+        return pizarron.responder(nota_id, (body or {}).get("texto", ""), s.usuario, s.nombre)
+    except pizarron.ErrorPizarron as exc:
+        raise _pizarron_error(exc) from exc
+
+
+@router.delete("/pizarron/{nota_id}/respuestas/{respuesta_id}", tags=["pizarron"])
+async def pizarron_borrar_respuesta(nota_id: str, respuesta_id: str,
+                                    s: Sesion = Depends(requiere(permisos.PIZARRON))):
+    try:
+        return pizarron.borrar_respuesta(nota_id, respuesta_id, s.usuario)
+    except pizarron.ErrorPizarron as exc:
+        raise _pizarron_error(exc) from exc
 
 
 # ── Préstamos ────────────────────────────────────────────────────────────────
