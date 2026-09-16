@@ -475,6 +475,67 @@
   .notas-filtros select { width:auto; padding:.45rem .6rem; font-size:.86rem; }
   .nota-ico { background:none; border:none; padding:0 .15rem; margin-left:.25rem; cursor:pointer;
           font-size:.95rem; line-height:1; vertical-align:-.05em; }
+  /* ── Lo que anda pasando en la Bayer ───────────────────────────────────── */
+  /* Colores de los gráficos como roles: una serie (magenta), rampa ordinal para las
+     edades y rampa secuencial para días y horarios. Validados con el verificador de
+     paletas (contraste, banda de luminosidad y rampas monótonas). */
+  .viz { --serie-1:#861E92; --grilla:#e6e8ec; --tinta:#1f2430; --tinta-2:#4b5263; --tinta-3:#6b7280;
+         --sube:#006300; --baja:#C7002A;
+         --edad-1:#dd82e8; --edad-2:#c766d2; --edad-3:#b04bbc; --edad-4:#9732a3; --edad-5:#7f148b; --edad-6:#680074;
+         --calor-0:#f4f5f7; --calor-1:#cbe7ff; --calor-2:#9ab5fa; --calor-3:#6d87c8; --calor-4:#445a97; --calor-5:#1e3069; }
+  .viz-filtros { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; margin-bottom:1.2rem; }
+  .viz-filtros .subtabs { margin:0; }
+  .viz-filtros .meta { margin:0; }
+  .viz-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.9rem; margin-bottom:1.3rem; }
+  .viz-kpi { background:#fff; border:1px solid var(--line); border-radius:14px; padding:1rem 1.1rem; }
+  .viz-kpi .l { font-size:.8rem; color:var(--tinta-2); }
+  .viz-kpi .n { font-size:2rem; font-weight:600; color:var(--navy); line-height:1.15; margin:.15rem 0; }
+  .viz-kpi .d { font-size:.76rem; color:var(--tinta-3); }
+  .viz-kpi .d.sube { color:var(--sube); } .viz-kpi .d.baja { color:var(--baja); }
+  .viz-cols { display:grid; grid-template-columns:1fr 1fr; gap:1.1rem; margin-bottom:1.1rem; align-items:start; }
+  .viz-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:1.1rem 1.2rem; min-width:0; }
+  .viz-card h3 { margin:0; color:var(--navy); font-size:.98rem; }
+  .viz-card .sub { color:var(--tinta-3); font-size:.78rem; margin:.15rem 0 .6rem; }
+  .viz-card-cab { display:flex; justify-content:space-between; align-items:flex-start; gap:.6rem; }
+  .viz-tabla-btn { background:none; border:1px solid var(--line); border-radius:8px; font-size:.72rem;
+          padding:.2rem .5rem; color:var(--tinta-2); cursor:pointer; font-family:inherit; white-space:nowrap; }
+  .viz-tabla-btn:hover { border-color:var(--magenta); color:var(--magenta); }
+  .viz-card table { font-size:.82rem; }
+  .viz-card td.num, .viz-card th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .viz-destacados { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.55rem; }
+  .viz-destacados li { display:flex; gap:.6rem; align-items:flex-start; font-size:.9rem; line-height:1.45; color:var(--tinta); }
+  .viz-destacados li .ico { flex:0 0 auto; }
+  .viz-destacados li.alerta { background:#fff4e0; border-radius:9px; padding:.45rem .6rem; color:#6b4500; }
+  .viz-lista { display:flex; flex-direction:column; }
+  .viz-item { padding:.65rem 0; border-bottom:1px solid var(--line); }
+  .viz-item:last-child { border-bottom:none; }
+  .viz-item b { color:var(--navy); font-size:.9rem; }
+  .viz-item .cuando { font-size:.78rem; color:var(--tinta-3); }
+  .viz-item p { margin:.25rem 0 0; font-size:.84rem; color:var(--tinta-2); line-height:1.45; }
+  .viz-item .tags { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.3rem; }
+  .viz-item .tags span { font-size:.7rem; background:#f3eef8; color:var(--magenta-d); border-radius:999px; padding:.08rem .5rem; }
+  .viz-calor { display:grid; grid-template-columns:5.2rem repeat(3,1fr); gap:3px; font-size:.78rem; }
+  .viz-calor .cab { color:var(--tinta-3); text-align:center; padding:.2rem 0; }
+  .viz-calor .dia { color:var(--tinta-2); display:flex; align-items:center; }
+  .viz-calor .celda { border-radius:6px; min-height:34px; display:flex; align-items:center; justify-content:center;
+          font-weight:600; font-variant-numeric:tabular-nums; cursor:default; }
+  .viz-calor .celda:hover, .viz-calor .celda:focus { outline:2px solid var(--navy); outline-offset:1px; }
+  .viz-escala { display:flex; align-items:center; gap:.35rem; font-size:.72rem; color:var(--tinta-3); margin-top:.6rem; }
+  .viz-escala i { width:18px; height:10px; border-radius:3px; display:inline-block; }
+  .viz-tend { font-size:.74rem; font-weight:600; white-space:nowrap; }
+  .viz-tend.crece { color:var(--sube); } .viz-tend.baja { color:var(--baja); } .viz-tend.estable { color:var(--tinta-3); }
+  .viz-vacio { text-align:center; padding:2rem 1rem; color:var(--tinta-2); }
+  .viz-vacio b { display:block; color:var(--navy); font-size:1.05rem; margin-bottom:.3rem; }
+  .viz-cargando { opacity:.55; transition:opacity .15s; }
+  /* Tablas anchas (talleres, "ver tabla"): se desplazan dentro de su tarjeta, nunca la página. */
+  .viz-grafico, .viz-tablavista { overflow-x:auto; }
+  @media (max-width:900px){ .viz-cols { grid-template-columns:1fr; } }
+  @media (max-width:680px){
+    .viz-filtros .subtabs { display:flex; flex-wrap:wrap; width:100%; }
+    .viz-filtros .subtabs button { flex:1 1 40%; padding:.42rem .6rem; }
+    .viz-kpi .n { font-size:1.6rem; }
+  }
+
   /* ── Pizarrón semanal ──────────────────────────────────────────────────── */
   .piz-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.55rem; margin-bottom:1rem; }
   .piz-toolbar .btn-sec { padding:.45rem .8rem; }
@@ -686,6 +747,22 @@
       <!-- Cruce de datos (debajo del buscador, en la pestaña Socios) -->
       <div id="cruceSection" class="hide"></div>
 
+      <!-- Lo que anda pasando en la Bayer: el registro de actividades, a la vista -->
+      <div id="actualidadView" class="hide viz">
+        <div class="viz-filtros">
+          <div class="subtabs" id="actPeriodo">
+            <button data-periodo="mes">Este mes</button>
+            <button data-periodo="3m" class="active">Últimos 3 meses</button>
+            <button data-periodo="12m">Últimos 12 meses</button>
+            <button data-periodo="anio">Este año</button>
+            <button data-periodo="anio_anterior">El año pasado</button>
+          </div>
+          <p class="meta" id="actRango"></p>
+        </div>
+        <div id="actMsg"></div>
+        <div id="actContenido"></div>
+      </div>
+
       <!-- Registro de actividades realizadas (lo que llega por el link público) -->
       <div id="registroView" class="hide">
         <div class="card">
@@ -888,7 +965,7 @@ let currentTab = "active";
 // Perfil de quien está adentro (rol, permisos y secciones). Lo trae /api/me.
 let ME = null;
 const puede = (p)=> !!(ME && ME.permisos && ME.permisos.includes(p));
-const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", pizarron:"Pizarrón de la semana", registro:"Actividades realizadas", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
+const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", pizarron:"Pizarrón de la semana", registro:"Actividades realizadas", actualidad:"Lo que anda pasando en la Bayer", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
 let loanSub = "todos";
 let loansAll = null;  // cache de loans_contact mientras se está en la pestaña Préstamos
 
@@ -1070,7 +1147,8 @@ function selectTab(tab){
   show($("notasView"), tab==="notas");
   show($("pizarronView"), tab==="pizarron");
   show($("registroView"), tab==="registro");
-  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas","pizarron","registro"].includes(tab));
+  show($("actualidadView"), tab==="actualidad");
+  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas","pizarron","registro","actualidad"].includes(tab));
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
   show($("cruceSection"), tab==="members");
@@ -1087,6 +1165,7 @@ function selectTab(tab){
   else if (tab==="notas") { loadNotas(); }
   else if (tab==="pizarron") { cerrarPizForm(); $("pizQ").value=""; PIZ.q=""; loadPizarron(null); }
   else if (tab==="registro") { loadRegistro(); }
+  else if (tab==="actualidad") { loadActualidad(); }
   else if (tab==="mails") { renderRecipients(); updatePreview();
     ensureCuotaMap().then(()=>{ updatePreview(); });
     refrescarAvisos().then(()=>{ if(currentTab==="mails") renderRecipients(); }); }
@@ -1238,6 +1317,257 @@ function renderFicha(d, volver){
       ${tabla([["Título","title"],["Autor","author"],["Prestado","issuedate",fecha],["Devuelto","returndate",fecha]], d.historial)}
     </div>
   `;
+}
+
+// ── Lo que anda pasando en la Bayer ───────────────────────────────────
+// Lo validado del registro de actividades, contado para todas y todos. Las cuentas
+// las hace el backend (app/panorama.py); acá solo se dibujan. Cada gráfico tiene su
+// tabla ("Ver tabla"), así ningún dato depende de pasar el mouse.
+const ACT = { periodo:"3m", datos:null, agenda:null, pedido:0 };
+const ACT_KPIS = [
+  ["actividades","Actividades"], ["personas","Personas que vinieron"],
+  ["talleres","Talleres con resumen"], ["participantes_talleres","Personas en talleres"],
+  ["primera_vez","Vinieron por primera vez"], ["horas","Horas de actividad"],
+];
+const vizColor = (n)=> getComputedStyle($("actualidadView")).getPropertyValue(n).trim();
+
+async function loadActualidad(){
+  const pedido=++ACT.pedido, cont=$("actContenido");
+  // Al cambiar de período se deja lo anterior a media luz, sin saltos ni pantallas vacías.
+  if(ACT.datos && cont.innerHTML) cont.classList.add("viz-cargando"); else cont.innerHTML=LOADER;
+  msg($("actMsg"),"","");
+  try {
+    const [d, agenda] = await Promise.all([
+      api("/api/panorama?periodo="+encodeURIComponent(ACT.periodo)),
+      api("/api/agenda?dias=14").catch(()=>null),
+    ]);
+    if(pedido!==ACT.pedido) return;
+    ACT.datos=d; ACT.agenda=agenda;
+    renderActualidad();
+  } catch(err){
+    if(pedido!==ACT.pedido) return;
+    cont.innerHTML=""; msg($("actMsg"),esc(err.message),"error");
+  } finally {
+    if(pedido===ACT.pedido) cont.classList.remove("viz-cargando");
+  }
+}
+document.querySelectorAll("#actPeriodo button").forEach(b=>b.addEventListener("click",()=>{
+  ACT.periodo=b.dataset.periodo;
+  document.querySelectorAll("#actPeriodo button").forEach(x=>x.classList.toggle("active",x===b));
+  loadActualidad();
+}));
+// "Ver tabla" / "Ver gráfico" en cada tarjeta.
+$("actualidadView").addEventListener("click", e=>{
+  const b=e.target.closest("[data-viz-toggle]"); if(!b) return;
+  const card=b.closest(".viz-card"), tabla=card.querySelector(".viz-tablavista"), graf=card.querySelector(".viz-grafico");
+  const verTabla=tabla.classList.contains("hide");
+  show(tabla, verTabla); show(graf, !verTabla);
+  b.textContent = verTabla ? "Ver gráfico" : "Ver tabla";
+});
+
+function vizDelta(n){
+  if(!n.anterior) return `<div class="d">${n.valor ? "Sin datos del período anterior para comparar" : "&nbsp;"}</div>`;
+  const cambio=Math.round((n.valor-n.anterior)/n.anterior*100);
+  if(!cambio) return `<div class="d">= igual que el período anterior</div>`;
+  return `<div class="d ${cambio>0?"sube":"baja"}">${cambio>0?"▲":"▼"} ${Math.abs(cambio)}% <span style="color:var(--tinta-3)">vs. período anterior (${miles(n.anterior)})</span></div>`;
+}
+function vizCard(titulo, sub, grafico, tablaHtml){
+  return `<section class="viz-card">
+    <div class="viz-card-cab"><div><h3>${titulo}</h3>${sub?`<p class="sub">${sub}</p>`:""}</div>
+      ${tablaHtml?'<button class="viz-tabla-btn" data-viz-toggle>Ver tabla</button>':""}</div>
+    <div class="viz-grafico">${grafico}</div>
+    ${tablaHtml?`<div class="viz-tablavista hide">${tablaHtml}</div>`:""}
+  </section>`;
+}
+const vizNum = (v)=> v==null || v==="" ? "" : `<span style="font-variant-numeric:tabular-nums">${miles(v)}</span>`;
+
+function renderActualidad(){
+  const d=ACT.datos, cont=$("actContenido");
+  destroyCharts();
+  $("actRango").textContent = `Del ${fechaAR(d.periodo.desde)} al ${fechaAR(d.periodo.hasta)} · se compara con ${fechaAR(d.anterior.desde)} al ${fechaAR(d.anterior.hasta)}`;
+  const queViene = vizCard("Lo que viene", "Próximos 14 días en el calendario", vizProximos(ACT.agenda));
+
+  if(!d.hay_datos){
+    const ayuda = puede("registros")
+      ? `Las actividades se cargan con los links de <b>Agenda → Actividades</b> y aparecen acá cuando se validan.`
+      : `Cuando la biblioteca registre y valide actividades, van a aparecer acá.`;
+    cont.innerHTML = `<div class="viz-cols">
+      <section class="viz-card viz-vacio"><b>Todavía no hay actividades registradas en este período</b>${ayuda}</section>
+      ${queViene}</div>`;
+    return;
+  }
+
+  const n=d.numeros;
+  const destacados = d.destacados.length
+    ? `<ul class="viz-destacados">${d.destacados.map(x=>`<li class="${x.alerta?"alerta":""}">
+        <span class="ico" aria-hidden="true">${x.alerta?"⚠️":"✦"}</span>
+        <span>${x.alerta?"<b>Para mirar:</b> ":""}${esc(x.texto)}</span></li>`).join("")}</ul>`
+    : '<p class="empty">Con más actividades registradas aparecen acá las cosas que se destacan.</p>';
+
+  const recientes = d.recientes.length ? `<div class="viz-lista">${d.recientes.map(r=>`<div class="viz-item">
+      <b>${esc(r.titulo)}</b>
+      <div class="cuando">${esc(nombreDia(r.fecha))} · ${esc(r.tipo)}${r.lugar?` · ${esc(r.lugar)}`:""} · ${miles(r.personas)} personas</div>
+      ${r.descripcion?`<p>${esc(r.descripcion)}</p>`:""}
+      ${r.tematicas.length?`<div class="tags">${r.tematicas.map(t=>`<span>${esc(t)}</span>`).join("")}</div>`:""}
+    </div>`).join("")}</div>` : '<p class="empty">Sin actividades únicas en el período.</p>';
+
+  const conMeses = d.por_mes.length > 1;
+  const edadesTotal = d.edades.reduce((a,e)=>a+e.personas,0);
+  const diasConDatos = d.dias.filter(c=>c.actividades);
+
+  cont.innerHTML = `
+    <div class="viz-kpis">${ACT_KPIS.map(([k,l])=>
+      `<div class="viz-kpi"><div class="l">${esc(l)}</div><div class="n">${miles(n[k].valor)}</div>${vizDelta(n[k])}</div>`).join("")}</div>
+
+    <div class="viz-cols">
+      ${vizCard("Lo que se destaca", esc(d.periodo.etiqueta), destacados)}
+      ${queViene}
+    </div>
+
+    <div class="viz-cols">
+      ${vizCard("Lo último que pasó", "Actividades únicas, de la más reciente", recientes)}
+      ${vizCard(conMeses?"Personas en actividades, mes a mes":"Personas en actividades",
+        "Sin contar talleres (esos van abajo)", '<div id="vizMeses"></div>',
+        tabla([["Mes","etiqueta"],["Actividades","actividades",vizNum],["Personas","personas",vizNum],
+               ["Encuentros de talleres","encuentros",vizNum],["Participantes de talleres","participantes",vizNum]], d.por_mes))}
+    </div>
+
+    <div class="viz-cols">
+      ${vizCard("Qué tipo de actividades se hicieron", "Cantidad de actividades", '<div id="vizTipos"></div>',
+        tabla([["Tipo","etiqueta"],["Actividades","actividades",vizNum],["Personas","personas",vizNum],["Promedio por actividad","promedio",vizNum]], d.tipos))}
+      ${vizCard("Qué temáticas convocan más", "Personas por actividad, en promedio", '<div id="vizTemas"></div>',
+        tabla([["Temática","etiqueta"],["Actividades","actividades",vizNum],["Personas","personas",vizNum],["Promedio por actividad","promedio",vizNum]], d.tematicas))}
+    </div>
+
+    <div class="viz-cols">
+      ${vizCard("A qué edades llegamos",
+        edadesTotal ? `Personas por edad, de lo informado (${d.edades_con_dato} actividad(es) y los talleres con edades cargadas)` : "Todavía no se informaron edades",
+        edadesTotal ? '<div id="vizEdades"></div>' : '<p class="empty">Aparece cuando se carguen las edades en el formulario.</p>',
+        edadesTotal ? tabla([["Edad","etiqueta"],["Personas","personas",vizNum]], d.edades) : "")}
+      ${vizCard("Qué días y horarios tienen más movimiento", "Cantidad de actividades por día y momento del día",
+        vizCalor(d.dias),
+        diasConDatos.length ? tabla([["Día","dia_nombre"],["Momento","momento_nombre"],["Actividades","actividades",vizNum],["Personas","personas",vizNum]], diasConDatos) : "")}
+    </div>
+
+    <div class="viz-cols">
+      ${vizCard("Cómo se enteró la gente",
+        d.difusion.length ? `En cuántas actividades se mencionó cada canal (${d.difusion_con_dato} con este dato)` : "Todavía sin este dato",
+        d.difusion.length ? '<div id="vizDifusion"></div>' : '<p class="empty">Aparece cuando se cargue en el formulario.</p>',
+        d.difusion.length ? tabla([["Canal","etiqueta"],["Actividades","actividades",vizNum]], d.difusion) : "")}
+      ${vizCard("Dónde pasaron las cosas", "Espacios y otros lugares",
+        tabla([["Lugar","etiqueta"],["Actividades","actividades",vizNum],["Personas","personas",vizNum],["Horas","horas",vizNum]], d.lugares))}
+    </div>
+
+    ${vizCard("Cómo vienen los talleres", "Personas que participaron cada mes, según los resúmenes mensuales", vizTalleres(d.talleres))}
+  `;
+
+  if(conMeses) vizColumnas("#vizMeses", d.por_mes, {serie:"Personas", valor:"personas",
+    extra:f=>`${f.actividades} actividad(es)`});
+  else vizBarrasH("#vizMeses", d.por_mes, {serie:"Personas", valor:"personas", extra:f=>`${f.actividades} actividad(es)`});
+  if(d.tipos.length) vizBarrasH("#vizTipos", d.tipos, {serie:"Actividades", valor:"actividades",
+    extra:f=>`${miles(f.personas)} personas · ${f.promedio} por actividad`});
+  if(d.tematicas.length) vizBarrasH("#vizTemas", [...d.tematicas].sort((a,b)=>b.promedio-a.promedio),
+    {serie:"Personas por actividad", valor:"promedio", extra:f=>`${f.actividades} actividad(es)`});
+  if(edadesTotal) vizColumnas("#vizEdades", d.edades, {serie:"Personas", valor:"personas",
+    colores:["--edad-1","--edad-2","--edad-3","--edad-4","--edad-5","--edad-6"].map(vizColor)});
+  if(d.difusion.length) vizBarrasH("#vizDifusion", d.difusion, {serie:"Actividades", valor:"actividades"});
+}
+
+// Barras horizontales de una sola serie: un color, valor en la punta, tooltip con el detalle.
+function vizBarrasH(sel, filas, {serie, valor, extra}){
+  const max=Math.max(1, ...filas.map(f=>f[valor]));
+  mkChart(sel, {
+    chart:{ type:"bar", height:filas.length*36+40, fontFamily:CH_FONT, toolbar:{show:false}, animations:{enabled:false} },
+    series:[{ name:serie, data:filas.map(f=>f[valor]) }],
+    xaxis:{ categories:filas.map(f=>f.etiqueta), max:Math.ceil(max*1.2), labels:{show:false},
+            axisBorder:{show:false}, axisTicks:{show:false} },
+    yaxis:{ labels:{ maxWidth:200, style:{ colors:vizColor("--tinta-2"), fontSize:"12px" } } },
+    colors:[vizColor("--serie-1")],
+    plotOptions:{ bar:{ horizontal:true, barHeight:"56%", borderRadius:4, borderRadiusApplication:"end",
+                        dataLabels:{ position:"top" } } },
+    dataLabels:{ enabled:true, offsetX:24, style:{ colors:[vizColor("--tinta")], fontWeight:600, fontSize:"12px" },
+                 formatter:v=>miles(v) },
+    grid:{ show:false, padding:{ right:8 } }, legend:{show:false},
+    states:{ hover:{ filter:{ type:"darken", value:0.9 } } },
+    tooltip:{ y:{ formatter:(v,{dataPointIndex:i})=> miles(v)+(extra?" · "+extra(filas[i]):"") } },
+  });
+}
+// Columnas (meses, edades). Nunca más de 24px de ancho; se rotula solo la más alta.
+function vizColumnas(sel, filas, {serie, valor, extra, colores}){
+  const el=document.querySelector(sel); if(!el) return;
+  const slot=Math.max(1,(el.clientWidth||480)-60)/Math.max(1,filas.length);
+  const ancho=Math.max(6, Math.min(60, Math.round(24/slot*100)));
+  const valores=filas.map(f=>f[valor]), iMax=valores.indexOf(Math.max(...valores));
+  mkChart(sel, {
+    chart:{ type:"bar", height:260, fontFamily:CH_FONT, toolbar:{show:false}, animations:{enabled:false} },
+    series:[{ name:serie, data:valores }],
+    xaxis:{ categories:filas.map(f=>f.etiqueta), axisBorder:{ color:"#c3c2b7" }, axisTicks:{show:false},
+            labels:{ style:{ colors:vizColor("--tinta-3"), fontSize:"11px" } }, tooltip:{enabled:false} },
+    yaxis:{ min:0, forceNiceScale:true, labels:{ formatter:v=>miles(Math.round(v)), style:{ colors:vizColor("--tinta-3") } } },
+    colors: colores || [vizColor("--serie-1")],
+    plotOptions:{ bar:{ columnWidth:ancho+"%", borderRadius:4, borderRadiusApplication:"end",
+                        distributed:!!colores, dataLabels:{ position:"top" } } },
+    dataLabels:{ enabled:true, offsetY:-20, style:{ colors:[vizColor("--tinta")], fontWeight:600, fontSize:"12px" },
+                 formatter:(v,{dataPointIndex:i})=> i===iMax && v ? miles(v) : "" },
+    grid:{ borderColor:vizColor("--grilla"), strokeDashArray:0, xaxis:{lines:{show:false}}, padding:{ top:10 } },
+    legend:{show:false}, states:{ hover:{ filter:{ type:"darken", value:0.9 } } },
+    tooltip:{ y:{ formatter:(v,{dataPointIndex:i})=> miles(v)+(extra?" · "+extra(filas[i]):"") } },
+  });
+}
+// Mapa de calor en HTML: día × momento del día, un solo tono de más claro a más oscuro.
+function vizCalor(celdas){
+  const max=Math.max(0, ...celdas.map(c=>c.actividades));
+  if(!max) return '<p class="empty">Sin actividades con día y horario en el período.</p>';
+  const paso=v=> v ? Math.max(1, Math.ceil(v/max*5)) : 0;
+  const momentos=["manana","tarde","noche"], nombres={manana:"Mañana", tarde:"Tarde", noche:"Noche"};
+  const filas=[0,1,2,3,4,5,6].map(dia=>{
+    const deDia=celdas.filter(c=>c.dia===dia);
+    return `<div class="dia">${esc(deDia[0].dia_nombre)}</div>` + momentos.map(m=>{
+      const c=deDia.find(x=>x.momento===m), p=paso(c.actividades);
+      const texto=`${c.dia_nombre} a la ${nombres[m].toLowerCase()}: ${c.actividades} actividad(es), ${miles(c.personas)} personas`;
+      return `<div class="celda" tabindex="0" title="${esc(texto)}" aria-label="${esc(texto)}"
+        style="background:var(--calor-${p});color:${p>=4?"#fff":"var(--tinta)"}">${c.actividades||""}</div>`;
+    }).join("");
+  }).join("");
+  return `<div class="viz-calor"><div></div>${momentos.map(m=>`<div class="cab">${nombres[m]}</div>`).join("")}${filas}</div>
+    <div class="viz-escala">Menos ${[1,2,3,4,5].map(i=>`<i style="background:var(--calor-${i})"></i>`).join("")} Más
+      <span style="margin-left:.4rem">(máximo: ${max} en un mismo día y momento)</span></div>`;
+}
+// Talleres: una fila por taller con su línea mes a mes y cómo viene.
+function vizTalleres(talleres){
+  if(!talleres.length) return '<p class="empty">Todavía no hay resúmenes mensuales de talleres en este período.</p>';
+  const tendencia={crece:"▲ Crece", baja:"▼ Baja", estable:"= Estable"};
+  return `<table><thead><tr><th>Taller</th><th>Mes a mes</th><th class="num">Último mes</th>
+      <th class="num">Encuentros</th><th>Cómo viene</th></tr></thead><tbody>
+    ${talleres.map(t=>`<tr>
+      <td><b>${esc(t.titulo)}</b>${t.tallerista?`<br><small style="color:var(--tinta-3)">${esc(t.tallerista)}</small>`:""}</td>
+      <td>${vizLinea(t.meses.map(m=>m.participantes))}
+        <small style="color:var(--tinta-3);display:block">${t.meses.map(m=>`${esc(m.etiqueta)}: ${m.participantes}`).join(" · ")}</small></td>
+      <td class="num">${miles(t.participantes)}</td>
+      <td class="num">${miles(t.encuentros)}</td>
+      <td>${t.tendencia?`<span class="viz-tend ${t.tendencia}">${tendencia[t.tendencia]}</span>`:'<span class="viz-tend estable">Un solo mes</span>'}</td>
+    </tr>`).join("")}</tbody></table>`;
+}
+function vizLinea(valores){
+  if(valores.length<2) return "";
+  const w=110, h=28, max=Math.max(...valores,1), min=Math.min(...valores,0);
+  const x=i=>4+i*(w-8)/(valores.length-1), y=v=>h-4-(v-min)/((max-min)||1)*(h-8);
+  const puntos=valores.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const ult=valores.length-1;
+  return `<svg width="${w}" height="${h}" role="img" aria-label="Participantes mes a mes: ${valores.join(", ")}">
+    <polyline points="${puntos}" fill="none" stroke="var(--serie-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(ult)}" cy="${y(valores[ult])}" r="4" fill="var(--serie-1)" stroke="#fff" stroke-width="2"/></svg>`;
+}
+// Lo que viene: los próximos días del calendario (Google + reservas aprobadas).
+function vizProximos(agenda){
+  if(!agenda || !agenda.configured) return '<p class="empty">El calendario no está disponible.</p>';
+  const t=new Date(), ahora=`${isoLocal(t)}T${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}`;
+  const evs=(agenda.events||[]).filter(e=>(e.todo_el_dia ? e.inicio.slice(0,10)>=ahora.slice(0,10) : e.inicio>=ahora)).slice(0,8);
+  if(!evs.length) return '<p class="empty">No hay nada agendado para los próximos 14 días.</p>';
+  return `<div class="viz-lista">${evs.map(e=>`<div class="viz-item">
+      <b>${esc(e.titulo)}</b>
+      <div class="cuando">${esc(nombreDia(e.inicio))}${e.todo_el_dia?"":` · ${esc(String(e.inicio).slice(11,16))}`}${e.lugar?` · ${esc(e.lugar)}`:""}${e.calendario?` · ${esc(e.calendario)}`:""}</div>
+    </div>`).join("")}</div>`;
 }
 
 // ── Registro de actividades ───────────────────────────────────────────

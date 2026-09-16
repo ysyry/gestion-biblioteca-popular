@@ -31,9 +31,10 @@ TALLERES_EDITAR = "talleres.editar"
 USUARIOS_ADMIN = "usuarios.admin"
 PIZARRON = "pizarron"                      # el pizarrón semanal del equipo de la biblioteca
 REGISTROS = "registros"                    # registro de actividades realizadas (módulo E)
+ACTUALIDAD = "actualidad"                  # "Lo que anda pasando en la Bayer": lo validado, a la vista
 
 _TODO = {
-    KOHA, MAILS, REGISTROS,
+    KOHA, MAILS, REGISTROS, ACTUALIDAD,
     CALENDARIO_VER, CALENDARIO_EDITAR,
     SOLICITUDES_CREAR, SOLICITUDES_RESOLVER,
     INVENTARIO_VER, INVENTARIO_EDITAR,
@@ -47,6 +48,7 @@ ROLES: dict[str, set[str]] = {
     "bibliotecaria": _TODO | {PIZARRON},
     "comision": set(_TODO),
     "subcomision": {
+        ACTUALIDAD,
         CALENDARIO_VER,
         SOLICITUDES_CREAR,
         INVENTARIO_VER,
@@ -80,6 +82,8 @@ def puede(rol: str, permiso: str) -> bool:
 SECCIONES: list[dict] = [
     {"id": "stats",      "titulo": "Inicio",      "permiso": KOHA,           "movil": True},
     {"id": "pizarron",   "titulo": "Pizarrón",    "permiso": PIZARRON,       "movil": True},
+    # Lo que se hizo en la biblioteca, contado: la ven todos (sin datos sensibles).
+    {"id": "actualidad", "titulo": "Lo que anda pasando", "permiso": ACTUALIDAD, "movil": True},
     {"id": "loans",      "titulo": "Préstamos",   "permiso": KOHA,           "movil": True},
     # La ficha y las notas de los socios, juntas: una nota lleva a la ficha y viceversa.
     {"id": "members",    "titulo": "Buscar",      "permiso": KOHA, "grupo": "Socios", "movil": True},

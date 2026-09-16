@@ -30,6 +30,7 @@ from .. import pagos
 from .. import cache
 from .. import espacios
 from .. import notas
+from .. import panorama
 from .. import permisos
 from .. import pizarron
 from .. import registro
@@ -302,6 +303,14 @@ async def registro_borrar(reg_id: str, _: Sesion = Depends(requiere(permisos.REG
     except registro.ErrorRegistro as exc:
         raise _registro_error(exc) from exc
     return {"ok": True}
+
+
+@router.get("/panorama", tags=["registro"])
+async def panorama_ver(periodo: str = Query("3m", pattern="^(mes|3m|12m|anio|anio_anterior)$"),
+                       _: Sesion = Depends(requiere(permisos.ACTUALIDAD))):
+    """"Lo que anda pasando en la Bayer": lo validado del registro, contado y comparado
+    con el período anterior. Lo ven todos los roles: no incluye datos sensibles."""
+    return {**panorama.armar(periodo), "periodos": panorama.PERIODOS}
 
 
 # ── Formulario público de registro (sin usuario) ──────────────────────────────

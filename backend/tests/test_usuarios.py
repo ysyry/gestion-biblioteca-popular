@@ -204,7 +204,7 @@ def test_rol_desconocido_no_puede_nada():
 
 def test_secciones_por_rol():
     ids = lambda rol: [s["id"] for s in permisos.secciones_de(rol)]
-    assert ids("subcomision") == ["agenda", "solicitudes"]
+    assert ids("subcomision") == ["actualidad", "agenda", "solicitudes"]
     assert "usuarios" in ids("bibliotecaria")
     assert "mails" in ids("comision")
     assert "cuotas" not in ids("subcomision")
@@ -230,7 +230,7 @@ def test_menu_agrupa_envios():
 def test_menu_deja_sueltas_las_que_no_tienen_grupo():
     menu = permisos.menu_de("bibliotecaria")
     sueltas = [e["id"] for e in menu if e["tipo"] == "seccion"]
-    assert sueltas == ["stats", "pizarron", "loans", "cuotas", "usuarios"]
+    assert sueltas == ["stats", "pizarron", "actualidad", "loans", "cuotas", "usuarios"]
 
 
 def test_menu_agrupa_socios_y_notas():
@@ -251,8 +251,8 @@ def test_menu_no_pierde_ninguna_seccion():
 def test_menu_de_subcomision_no_tiene_grupos_vacios():
     """Si el rol no ve nada de un grupo, el grupo no aparece."""
     menu = permisos.menu_de("subcomision")
-    assert [e["titulo"] for e in menu] == ["Agenda"]      # ni Envíos, ni Reportes, ni Usuarios
-    assert [i["id"] for i in menu[0]["items"]] == ["agenda", "solicitudes"]
+    assert [e["titulo"] for e in menu] == ["Lo que anda pasando", "Agenda"]   # ni Envíos, ni Reportes, ni Usuarios
+    assert [i["id"] for i in menu[1]["items"]] == ["agenda", "solicitudes"]
 
 
 def test_menu_de_rol_desconocido_es_vacio():

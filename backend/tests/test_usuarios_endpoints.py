@@ -35,12 +35,12 @@ def test_me_trae_rol_permisos_y_secciones(como):
     assert [s["id"] for s in d["secciones"]][0] == "stats"
 
 
-def test_me_de_subcomision_solo_ve_agenda_y_solicitudes(como):
+def test_me_de_subcomision_ve_lo_institucional(como):
     d = como("subcomision", subcomision="Prensa").get("/api/me").json()
-    assert [s["id"] for s in d["secciones"]] == ["agenda", "solicitudes"]
+    assert [s["id"] for s in d["secciones"]] == ["actualidad", "agenda", "solicitudes"]
     assert d["subcomision"] == "Prensa"
-    # Nada de socios, cuotas, mails ni usuarios
-    assert [e["titulo"] for e in d["menu"]] == ["Agenda"]
+    # Nada de socios, cuotas, mails, registros ni usuarios
+    assert [e["titulo"] for e in d["menu"]] == ["Lo que anda pasando", "Agenda"]
 
 
 # ── ABM ─────────────────────────────────────────────────────────────────────

@@ -42,6 +42,7 @@ organización** — comisión directiva y subcomisiones. Eso implica tres cosas 
 | **Inventario** | ✅ ver + editar | ✅ ver + editar | 👁️ ver + pedir prestado |
 | **Talleres y actividades** | ✅ ver + editar | ✅ ver + editar | 👁️ solo ver |
 | **Registro de actividades** | ✅ links, validar, estadísticas | ✅ links, validar, estadísticas | 👁️ las de sus actividades *(a confirmar)* |
+| **Lo que anda pasando en la Bayer** | ✅ | ✅ | ✅ (sin datos sensibles) |
 | **Notas de socios** (dentro de Socios) | ✅ | ✅ | ❌ |
 | **Pizarrón semanal** | ✅ | ❌ | ❌ |
 | **Usuarios de la app** | ✅ | ✅ | ❌ |
@@ -480,8 +481,30 @@ marcados "requiere atención" aparecen además como aviso en el inicio.
 
 ---
 
-### CU-E5 · Tablero de actividades y reportes
-**Actor:** Bibliotecaria o Comisión Directiva · **Frecuencia:** mensual / anual
+### CU-E5 · Lo que anda pasando en la Bayer
+**Actor:** todos los roles, subcomisiones incluidas · **Frecuencia:** semanal / mensual
+
+Una sección que muestra lo que se registró y se validó, contado. Arriba se elige el
+período (este mes, últimos 3 o 12 meses, este año, el año pasado) y todo se compara
+con el período anterior del mismo largo.
+
+1. **Números del período:** actividades, personas que vinieron, talleres con resumen,
+   personas en talleres, gente que vino por primera vez y horas de actividad.
+2. **Lo que se destaca:** frases armadas con los datos (la actividad con más público, la
+   temática que más convoca, el momento de la semana con más movimiento) y un aviso si
+   algún taller se viene vaciando.
+3. **Lo que viene:** los próximos 14 días del calendario.
+4. **Lo último que pasó:** las actividades más recientes con su descripción.
+5. **Gráficos:** personas mes a mes, tipos de actividad, temáticas por promedio, edades,
+   días y horarios, cómo se enteró la gente, dónde pasaron las cosas y cómo viene cada
+   taller mes a mes. Cada gráfico se puede ver también como tabla.
+
+**Reglas:**
+- Solo cuenta lo **validado**.
+- Como la ven también las subcomisiones, **no muestra nada sensible**: ni incidentes, ni
+  contactos, ni valoraciones, ni montos.
+- Los datos se guardan campo por campo, con categorías fijas y una versión de esquema;
+  el día de la semana, el momento del día y la duración se calculan siempre igual.
 
 Preguntas que tiene que poder responder:
 
@@ -541,7 +564,7 @@ Suma la mirada del público a la de quien coordinó, que naturalmente tiende a s
 | # | Entrega | Qué incluye |
 |---|---|---|
 | E·1 | **Registro básico** *(hecho)* | Links (general, de actividad y de taller), formulario de actividad, resumen mensual de taller, bandeja de validación, export Excel |
-| E·2 | **Tablero** | Estadísticas de CU-E5 y memoria anual |
+| E·2 | **Lo que anda pasando en la Bayer** *(hecho, sin memoria anual todavía)* | La sección de CU-E5; falta la memoria anual en PDF |
 | E·3 | **Completitud y público** | "Faltan registrar" con recordatorio, fotos, encuesta al público |
 
 ---
@@ -735,5 +758,5 @@ solo mediante el código del link, límite de envíos y sin mostrar nunca datos 
 | 5 | **Registro de actividades** — E·1 | Hecho | Cuanto antes arranca, antes hay histórico; el formulario público se hace para celular desde el inicio |
 | 6 | **Versión celular** (menú inferior, tarjetas, PWA) | — | Transversal: conviene antes de sumar más pantallas |
 | 7 | **Talleres y actividades** | — | Alimenta el calendario y el registro |
-| 8 | **Registro** — E·2 y E·3 | — | El tablero rinde con algunos meses de datos; "faltan registrar" necesita talleres |
+| 8 | **Registro** — E·2 y E·3 | E·2 hecho (sin memoria anual) | El tablero rinde con algunos meses de datos; "faltan registrar" necesita talleres |
 | 9 | **Inventario** | — | El más autónomo, se puede hacer sin depender del resto |

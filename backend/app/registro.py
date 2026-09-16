@@ -78,6 +78,9 @@ SUSPENSION = {"feriado": "Feriado", "clima": "Clima", "ausencia": "Ausencia del 
 CLASES = ("actividad", "taller")
 CLASES_LINK = ("general", "actividad", "taller")
 RECIBIDO, VALIDADO, DESCARTADO = "recibido", "validado", "descartado"
+# Versión de la forma de los datos. Si algún día cambia un campo, los registros viejos
+# se reconocen por este número y se pueden convertir sin adivinar.
+ESQUEMA = 1
 ESTADOS = {RECIBIDO: "Recibido", VALIDADO: "Validado", DESCARTADO: "Descartado"}
 
 MAX_TEXTO = 2000
@@ -162,7 +165,7 @@ def _clave_de(valor, catalogo: dict, campo: str, obligatorio: bool = False) -> s
     return k
 
 
-def _normalizar(texto: str) -> str:
+def normalizar(texto: str) -> str:
     s = unicodedata.normalize("NFD", (texto or "").lower())
     return " ".join("".join(c for c in s if unicodedata.category(c) != "Mn").split())
 
@@ -451,14 +454,14 @@ def limpiar(clase: str, datos: dict) -> dict:
 def _parecidos(reg: dict) -> list[str]:
     """Ids de registros que parecen el mismo: misma fecha (o mes) y nombre parecido."""
     d, clase = reg["datos"], reg["clase"]
-    titulo = _normalizar(d["titulo"])
+    titulo = normalizar(d["titulo"])
     out = []
     for otro in _leer(_anio_de(reg)):
         if otro["id"] == reg["id"] or otro["clase"] != clase or otro["estado"] == DESCARTADO:
             continue
         o = otro["datos"]
         mismo_momento = (o.get("fecha") == d.get("fecha")) if clase == "actividad" else (o.get("mes") == d.get("mes"))
-        if mismo_momento and _normalizar(o["titulo"]) == titulo:
+        if mismo_momento and normalizar(o["titulo"]) == titulo:
             out.append(otro["id"])
     return out
 
@@ -481,6 +484,7 @@ def guardar(clase: str, datos: dict, *, link: dict | None = None, cargado_por: s
         "validado_por": cargado_por if not link else "",
         "validado_cuando": _ahora() if not link else "",
         "motivo": "",
+        "esquema": ESQUEMA,
     }
     anio = _anio_de(reg)
     reg["id"] = f"{anio}-{secrets.token_hex(5)}"
@@ -570,6 +574,52 @@ def cuando_de(reg: dict) -> str:
     return d.get("fecha") or (d.get("mes", "") + "-28")
 
 
+def validados_entre(desde: date, hasta: date) -> list[dict]:
+    """Registros validados cuya actividad (o mes de taller) cae entre dos fechas."""
+    out = []
+    for anio in range(desde.year, hasta.year + 1):
+        for r in _leer(anio):
+            if r["estado"] != VALIDADO:
+                continue
+            ini, fin = rango_de(r)
+            if ini <= hasta and fin >= desde:
+                out.append(r)
+    return out
+
+
+def rango_de(reg: dict) -> tuple[date, date]:
+    """Días que abarca un registro: el de la actividad, o el mes entero del resumen."""
+    d = reg["datos"]
+    if d.get("fecha"):
+        dia = date.fromisoformat(d["fecha"])
+        return dia, dia
+    anio, mes = (int(x) for x in d["mes"].split("-"))
+    fin = date(anio + (mes == 12), mes % 12 + 1, 1)
+    return date(anio, mes, 1), date.fromordinal(fin.toordinal() - 1)
+
+
+DIAS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+MOMENTOS = {"manana": "Mañana", "tarde": "Tarde", "noche": "Noche"}
+
+
+def derivados(reg: dict) -> dict:
+    """Datos que se calculan de lo cargado y sirven para comparar: día de la semana,
+    momento del día y duración. Se calculan siempre igual, así no hay dos criterios."""
+    d = reg["datos"]
+    if reg["clase"] != "actividad" or not d.get("fecha"):
+        return {}
+    dia = date.fromisoformat(d["fecha"]).weekday()
+    hora = int((d.get("hora_inicio") or "0:0").split(":")[0])
+    momento = "manana" if hora < 12 else "tarde" if hora < 19 else "noche"
+    duracion = None
+    if d.get("hora_inicio") and d.get("hora_fin"):
+        h1, m1 = (int(x) for x in d["hora_inicio"].split(":"))
+        h2, m2 = (int(x) for x in d["hora_fin"].split(":"))
+        duracion = max(0, (h2 * 60 + m2) - (h1 * 60 + m1)) or None
+    return {"dia_semana": dia, "dia_nombre": DIAS[dia], "momento": momento,
+            "momento_nombre": MOMENTOS[momento], "duracion_min": duracion}
+
+
 def pendientes() -> int:
     return sum(1 for r in listar(estado=RECIBIDO))
 
@@ -629,6 +679,9 @@ _COLUMNAS = [
     ("incidente", lambda r, d: (d.get("incidente") or {}).get("texto", "")),
     ("continua", lambda r, d: CONTINUA.get(d.get("continua"), "")),
     ("completo", lambda r, d: (d.get("quien_completa") or {}).get("nombre", "")),
+    ("dia_semana", lambda r, d: derivados(r).get("dia_nombre", "")),
+    ("momento", lambda r, d: derivados(r).get("momento_nombre", "")),
+    ("duracion_min", lambda r, d: derivados(r).get("duracion_min") or ""),
     ("cargado", lambda r, d: r.get("creado", "")[:10]),
 ]
 
