@@ -14,6 +14,10 @@ Una solicitud puede repetirse (semanal, quincenal, mensual). La repetición se e
 en `fechas`: cada ocurrencia concreta con su inicio y fin. Todo lo que mira el
 calendario y los cruces trabaja sobre esa lista, no sobre la regla.
 
+Lo aprobado se publica además en el Google Calendar de la biblioteca (ver
+`calendario_google.py`). Acá solo se lleva la cuenta: `google_pendiente` dice que lo que
+hay en Google ya no coincide con la solicitud y hay que sincronizar.
+
 Se guarda en `storage` bajo la clave `solicitudes`.
 """
 from __future__ import annotations
@@ -145,6 +149,11 @@ def _anotar(s: dict, quien: str, que: str) -> None:
     s["actualizado"] = _ahora()
 
 
+def _para_google(s: dict) -> None:
+    """Marca si hay que tocar Google: publicar lo aprobado o sacar lo que dejó de estarlo."""
+    s["google_pendiente"] = s.get("estado") == APROBADA or bool(s.get("google_eventos"))
+
+
 # ── Conflictos ──────────────────────────────────────────────────────────────
 def conflictos(espacio_id: str, fechas: list[dict], excluir_id: str | None = None) -> list[dict]:
     """Reservas ya aprobadas en ese espacio que se pisan con las fechas pedidas.
@@ -216,8 +225,11 @@ def crear(datos: dict, solicitante: dict) -> dict:
         "estado": PENDIENTE,
         "pedido_original": None,
         "resolucion": None,
-        "google_event_id": None,
+        "google_eventos": 0,           # cuántos eventos puede haber en Google (ver calendario_google)
         "google_pendiente": False,
+        "google_error": "",
+        "google_publicada": None,
+        "avisos": [],                  # mails que se le mandaron a quien pidió
         "historial": [],
         "creado": _ahora(),
         "actualizado": _ahora(),
@@ -249,6 +261,7 @@ def editar(sid: str, datos: dict, por: str) -> dict:
                 f"Una solicitud {ETIQUETAS[s['estado']].lower()} ya no se puede editar.")
         s.update(d)
         s["estado"] = PENDIENTE          # vuelve a la cola de resolución
+        _para_google(s)
         _anotar(s, por, "Editó el pedido")
         storage.set(CLAVE, lista)
     return s
@@ -286,7 +299,6 @@ def resolver(sid: str, decision: str, por: str, motivo: str = "",
                     s.update({k: nuevos[k] for k in (*_CAMPOS, "fechas")})
                     _anotar(s, por, "Ajustó el pedido al aprobar: " + ", ".join(movido))
             s["estado"] = APROBADA
-            s["google_pendiente"] = True       # queda por publicar en Google Calendar
             _anotar(s, por, "Aprobó la solicitud")
         elif decision == "rechazar":
             s["estado"] = RECHAZADA
@@ -297,6 +309,7 @@ def resolver(sid: str, decision: str, por: str, motivo: str = "",
 
         s["resolucion"] = {"por": por, "cuando": _ahora(),
                            "decision": decision, "motivo": (motivo or "").strip()}
+        _para_google(s)
         storage.set(CLAVE, lista)
     logger.info("Solicitud %s: %s por %s", sid, decision, por)
     return s
@@ -310,10 +323,67 @@ def cancelar(sid: str, por: str, motivo: str = "") -> dict:
         if s["estado"] == CANCELADA:
             raise ErrorSolicitud("Esta solicitud ya estaba cancelada.")
         s["estado"] = CANCELADA
-        s["google_pendiente"] = bool(s.get("google_event_id"))   # hay que borrarlo allá
+        s["cancelacion"] = {"por": por, "cuando": _ahora(), "motivo": (motivo or "").strip()}
+        _para_google(s)                  # si estaba publicada, hay que borrarla allá
         _anotar(s, por, "Canceló la reserva" + (f": {motivo.strip()}" if motivo else ""))
         storage.set(CLAVE, lista)
     return s
+
+
+# ── Lo que pasa afuera: Google Calendar y avisos por mail ──────────────────
+def huella(s: dict) -> tuple:
+    """Lo que se publica en Google. Si cambia mientras se sincroniza, hay que volver."""
+    return (s.get("estado"), s.get("titulo"), s.get("descripcion"), s.get("espacio_id"),
+            tuple((f["inicio"], f["fin"]) for f in s.get("fechas", [])))
+
+
+def reservar_eventos_google(sid: str, cantidad: int) -> None:
+    """Antes de crear eventos en Google, anota que puede llegar a haber `cantidad`.
+
+    Si la publicación se corta a la mitad, así se sabe hasta dónde hay que limpiar.
+    """
+    with _LOCK:
+        lista = _leer()
+        s = _buscar(lista, sid)
+        s["google_eventos"] = max(int(s.get("google_eventos") or 0), cantidad)
+        storage.set(CLAVE, lista)
+
+
+def marcar_google(sid: str, huella_publicada: tuple, *, eventos: int | None = None,
+                  error: str = "") -> None:
+    """Anota cómo salió la sincronización con Google.
+
+    Si la solicitud cambió mientras se publicaba, queda pendiente: lo que está en
+    Google es lo de antes y la próxima pasada lo corrige.
+    """
+    with _LOCK:
+        lista = _leer()
+        s = next((x for x in lista if x.get("id") == sid), None)
+        if s is None:
+            return
+        if error:
+            s["google_error"] = error
+        else:
+            s["google_eventos"] = eventos or 0
+            s["google_error"] = ""
+            s["google_publicada"] = _ahora() if eventos else None
+            s["google_pendiente"] = huella(s) != huella_publicada
+        storage.set(CLAVE, lista)
+
+
+def pendientes_google() -> list[str]:
+    return [s["id"] for s in _leer() if s.get("google_pendiente")]
+
+
+def anotar_aviso(sid: str, aviso: dict) -> None:
+    """Guarda que se le mandó (o no se pudo mandar) un mail a quien pidió."""
+    with _LOCK:
+        lista = _leer()
+        s = next((x for x in lista if x.get("id") == sid), None)
+        if s is None:
+            return
+        s.setdefault("avisos", []).append({"cuando": _ahora(), **aviso})
+        storage.set(CLAVE, lista)
 
 
 # ── Consultas ───────────────────────────────────────────────────────────────

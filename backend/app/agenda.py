@@ -20,6 +20,8 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import os
+import re
+from urllib.parse import unquote
 
 import httpx
 
@@ -63,6 +65,18 @@ def _parse_sources() -> list[dict]:
 
 def configured() -> bool:
     return bool(_parse_sources())
+
+
+def calendario_id(nombre: str) -> str:
+    """El id de Google del calendario con ese nombre, o "" si no está configurado.
+
+    Sale de su dirección iCal: .../calendar/ical/<id>/private-.../basic.ics
+    """
+    for n, url in _raw_pairs():
+        if n.strip().lower() == nombre.strip().lower():
+            m = re.search(r"/calendar/ical/([^/]+)/", url)
+            return unquote(m.group(1)) if m else ""
+    return ""
 
 
 def calendars() -> list[dict]:

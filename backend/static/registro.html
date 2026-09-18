@@ -167,6 +167,25 @@ function edades(){
         <input type="number" min="0" inputmode="numeric" value="${esc(f[k]??"")}" />
         <button type="button" data-paso="1">+</button></div></div>`).join("")}</div>`;
 }
+// Las subcomisiones que conoce la app, más la que ya venga cargada aunque no esté.
+function opcionesSubcomision(){
+  const subs=[...(CONF.catalogos.subcomisiones||[])];
+  if(DATOS.subcomision && !subs.includes(DATOS.subcomision)) subs.push(DATOS.subcomision);
+  return Object.fromEntries(subs.map(x=>[x,x]));
+}
+// Quién organizó y, si fue una subcomisión, cuál: así después cada una ve lo suyo.
+function organizaCampos(){
+  const c=CONF.catalogos, org=DATOS.organiza||"biblioteca", subs=opcionesSubcomision();
+  const hay=Object.keys(subs).length;
+  let extra="";
+  if(org==="subcomision"){
+    if(hay) extra+=sel("subcomision","¿Qué subcomisión?", subs, {vacio:"Otra (no está en la lista)"});
+    if(!hay || !DATOS.subcomision) extra+=txt("organiza_detalle", hay?"¿Cuál?":"¿Qué subcomisión?", {ph:"Nombre de la subcomisión"});
+  } else if(org==="institucion"){
+    extra=txt("organiza_detalle","¿Con qué institución?",{ph:"Opcional"});
+  }
+  return sel("organiza","¿Quién organizó?", c.organiza) + extra;
+}
 function espacioCampo(){
   const ops = Object.fromEntries((CONF.catalogos.espacios||[]).map(e=>[e.id, e.nombre]));
   return sel("espacio_id","¿Dónde fue?", ops, {vacio:"Otro lugar o virtual"}) +
@@ -204,8 +223,7 @@ function pasoQueFue(){
     ${sel("modalidad","Modalidad", c.modalidades)}
     ${chips("tematicas","¿De qué se trató?", c.tematicas, {max:3, hint:"Hasta 3."})}
     ${txt("a_cargo","¿Quién estuvo a cargo?",{ph:"Nombre y, si querés, si es tallerista, subcomisión o invitada/o"})}
-    ${sel("organiza","¿Quién organizó?", c.organiza)}
-    ${txt("organiza_detalle","¿Qué subcomisión o institución?",{ph:"Opcional"})}`;
+    ${organizaCampos()}`;
 }
 function pasoQuienesVinieron(){
   const c = CONF.catalogos;
@@ -244,6 +262,8 @@ function dibujarTaller(){
       ${txt("titulo","Taller",{req:true})}
       ${txt("mes","¿Qué mes informás?",{req:true, tipo:"month"})}
       ${txt("tallerista","¿Quién lo da?",{})}
+      ${Object.keys(opcionesSubcomision()).length
+        ? sel("subcomision","¿Es de una subcomisión?", opcionesSubcomision(), {vacio:"No, es de la biblioteca"}) : ""}
       <h2 style="margin-top:1.3rem">Los encuentros</h2>
       <div class="fila">${txt("encuentros","¿Cuántos se hicieron?",{req:true, tipo:"number"})}${txt("suspendidos","¿Cuántos se suspendieron?",{tipo:"number"})}</div>
       ${sel("motivo_suspension","Si se suspendió alguno, ¿por qué?", c.suspension, {vacio:"—"})}
@@ -276,7 +296,8 @@ function enganchar(){
     el.addEventListener("input", ()=>{
       DATOS[el.dataset.campo] = el.type==="checkbox" ? el.checked : el.value;
       guardarBorrador();
-      if(el.dataset.campo==="espacio_id") dibujar();      // "otro lugar" muestra el campo libre
+      // Estos cambian qué otros campos se muestran: "otro lugar", "¿qué subcomisión?"…
+      if(["espacio_id","organiza","subcomision"].includes(el.dataset.campo)) dibujar();
     });
   });
   f.querySelectorAll("[data-chips]").forEach(cont=>{

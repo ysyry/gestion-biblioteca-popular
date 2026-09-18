@@ -11,7 +11,8 @@ Roles:
                       el pizarrón semanal, que es solo del equipo de la biblioteca.
   · `subcomision`   — cultura, prensa, infantil, huerta… Usuario propio de la app.
                       Solo lo institucional: calendario, inventario y talleres para
-                      mirar, y sus propias solicitudes de espacio.
+                      mirar, sus propias solicitudes de espacio y los registros de
+                      sus propias actividades.
 """
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ USUARIOS_ADMIN = "usuarios.admin"
 PIZARRON = "pizarron"                      # el pizarrón semanal del equipo de la biblioteca
 REGISTROS = "registros"                    # registro de actividades realizadas (módulo E)
 ACTUALIDAD = "actualidad"                  # "Lo que anda pasando en la Bayer": lo validado, a la vista
+REGISTROS_PROPIOS = "registros.propios"    # una subcomisión: los registros de sus actividades
 
 _TODO = {
     KOHA, MAILS, REGISTROS, ACTUALIDAD,
@@ -49,6 +51,7 @@ ROLES: dict[str, set[str]] = {
     "comision": set(_TODO),
     "subcomision": {
         ACTUALIDAD,
+        REGISTROS_PROPIOS,
         CALENDARIO_VER,
         SOLICITUDES_CREAR,
         INVENTARIO_VER,
@@ -93,6 +96,8 @@ SECCIONES: list[dict] = [
     {"id": "agenda",      "titulo": "Calendario",  "permiso": CALENDARIO_VER,   "grupo": "Agenda", "movil": True},
     {"id": "solicitudes", "titulo": "Solicitudes", "permiso": SOLICITUDES_CREAR, "grupo": "Agenda", "movil": True},
     {"id": "registro",    "titulo": "Actividades", "permiso": REGISTROS,          "grupo": "Agenda", "movil": False},
+    # Lo mismo, visto por una subcomisión: solo lo suyo y sin tocar nada.
+    {"id": "mias",        "titulo": "Nuestras actividades", "permiso": REGISTROS_PROPIOS, "grupo": "Agenda", "movil": True},
 
     # Todo lo que sale de la biblioteca hacia afuera, junto.
     {"id": "mails",      "titulo": "Escribir",    "permiso": MAILS, "grupo": "Envíos", "movil": False},

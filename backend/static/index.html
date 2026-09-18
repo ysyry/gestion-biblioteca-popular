@@ -134,7 +134,7 @@
   .help-list { display:flex; flex-direction:column; gap:.5rem; max-height:52vh; overflow:auto; }
   .help-row { display:flex; gap:.6rem; align-items:flex-start; font-size:.86rem; line-height:1.45; }
   .help-row code { flex:0 0 auto; min-width:170px; }
-  .hist-toolbar { display:flex; align-items:center; gap:.6rem; margin-bottom:.9rem; }
+  .hist-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; margin-bottom:.9rem; }
   .hist-toolbar .subtabs { margin:0; }
   .hist-msg { margin:.1rem 0 .55rem; padding:.55rem .7rem; background:#fafbfc; border:1px solid var(--line);
     border-radius:8px; font-size:.8rem; line-height:1.45; white-space:pre-wrap; word-break:break-word;
@@ -293,9 +293,10 @@
   .badge.aldia { background:#dff3e8; color:var(--green); }
 
   /* Sub-tabs (control segmentado) */
-  .subtabs { display:inline-flex; background:#eef0f3; border-radius:11px; padding:.25rem; margin-bottom:1.1rem; gap:.2rem; }
+  .subtabs { display:inline-flex; background:#eef0f3; border-radius:11px; padding:.25rem; margin-bottom:1.1rem; gap:.2rem;
+             max-width:100%; overflow-x:auto; }   /* en pantalla chica se desliza de costado */
   .subtabs button { border:none; background:transparent; padding:.42rem 1.3rem; border-radius:8px; cursor:pointer;
-          font-family:inherit; font-size:.88rem; color:var(--muted); font-weight:500; }
+          font-family:inherit; font-size:.88rem; color:var(--muted); font-weight:500; white-space:nowrap; }
   .subtabs button.active { background:#fff; color:var(--navy); box-shadow:0 1px 2px rgba(20,30,60,.12); font-weight:600; }
 
   .toolbar { display:flex; gap:.6rem; margin-bottom:1.1rem; }
@@ -359,6 +360,10 @@
   .sol-motivo { margin-top:.55rem; font-size:.85rem; background:#f4f5f7;
                 border-radius:8px; padding:.5rem .7rem; line-height:1.45; }
   .sol-card .row-btns { margin-top:.9rem; }
+  .sol-ext { margin-top:.45rem; font-size:.8rem; color:var(--muted); line-height:1.4; }
+  .sol-ext.error { color:#a3001f; }
+  .sol-google-aviso { margin:0 0 .9rem; padding:.55rem .8rem; border-radius:8px;
+                      background:#f4f5f7; font-size:.84rem; color:var(--muted); line-height:1.45; }
 
   .sol-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:0 1.1rem; }
   .sol-grid label { margin-top:.55rem; }
@@ -486,6 +491,7 @@
   .viz-filtros { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; margin-bottom:1.2rem; }
   .viz-filtros .subtabs { margin:0; }
   .viz-filtros .meta { margin:0; }
+  .viz-filtros select { width:auto; max-width:100%; margin:0; }
   .viz-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.9rem; margin-bottom:1.3rem; }
   .viz-kpi { background:#fff; border:1px solid var(--line); border-radius:14px; padding:1rem 1.1rem; }
   .viz-kpi .l { font-size:.8rem; color:var(--tinta-2); }
@@ -757,10 +763,24 @@
             <button data-periodo="anio">Este año</button>
             <button data-periodo="anio_anterior">El año pasado</button>
           </div>
+          <select id="actDe" class="hide" aria-label="De quién son las actividades"></select>
           <p class="meta" id="actRango"></p>
         </div>
         <div id="actMsg"></div>
         <div id="actContenido"></div>
+      </div>
+
+      <!-- Nuestras actividades: lo que registró una subcomisión (solo para ver) -->
+      <div id="miasView" class="hide">
+        <div class="card">
+          <div class="hist-toolbar">
+            <button class="btn-sec hide" id="miasNumeros">Ver nuestros números</button>
+            <button class="btn-refresh" id="miasRef">↻</button>
+          </div>
+          <p class="meta" id="miasIntro" style="margin:0 0 .9rem;line-height:1.5"></p>
+          <div id="miasMsg"></div>
+          <div id="miasLista">Cargando…</div>
+        </div>
       </div>
 
       <!-- Registro de actividades realizadas (lo que llega por el link público) -->
@@ -930,6 +950,7 @@
               <button data-origen="" class="active">Todos</button>
               <button data-origen="auto">Automáticos</button>
               <button data-origen="manual">Mails</button>
+              <button data-origen="avisos">Avisos</button>
             </div>
             <button class="btn-refresh" id="enviosRef">↻</button>
           </div>
@@ -965,7 +986,7 @@ let currentTab = "active";
 // Perfil de quien está adentro (rol, permisos y secciones). Lo trae /api/me.
 let ME = null;
 const puede = (p)=> !!(ME && ME.permisos && ME.permisos.includes(p));
-const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", pizarron:"Pizarrón de la semana", registro:"Actividades realizadas", actualidad:"Lo que anda pasando en la Bayer", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
+const TAB_TITLES = { stats:"Inicio", estrategia:"Panel estratégico", loans:"Préstamos", members:"Socios", notas:"Notas de socios", pizarron:"Pizarrón de la semana", registro:"Actividades realizadas", mias:"Nuestras actividades", actualidad:"Lo que anda pasando en la Bayer", cuotas:"Cuotas societarias", agenda:"Calendario de actividades", mails:"Envío de mails", auto:"Envíos automáticos", envios:"Historial de envíos", usuarios:"Usuarios de la app", solicitudes:"Solicitudes de espacio" };
 let loanSub = "todos";
 let loansAll = null;  // cache de loans_contact mientras se está en la pestaña Préstamos
 
@@ -1047,17 +1068,20 @@ document.addEventListener("click", e=>{
   if(b){ e.preventDefault(); e.stopPropagation(); mostrarAyuda(b.dataset.help); }
 });
 
-function uiConfirm({title="Confirmar", message="", ok="Confirmar", danger=false}={}){
+// Con `campo` muestra además un texto opcional y devuelve lo escrito (o false si se cancela).
+function uiConfirm({title="Confirmar", message="", ok="Confirmar", danger=false, campo=""}={}){
   return new Promise(resolve=>{
     const bg=document.createElement("div"); bg.className="modal-bg";
     bg.innerHTML=`<div class="modal"><h3>${esc(title)}</h3>
       <p style="margin:.2rem 0 0;line-height:1.5">${message}</p>
+      ${campo?`<label for="ucCampo" style="margin-top:.8rem">${esc(campo)}</label>
+        <textarea id="ucCampo" rows="2"></textarea>`:""}
       <div class="row-btns"><button class="btn-sec" id="ucNo">Cancelar</button>
         <button class="primary${danger?' danger-btn':''}" style="width:auto;margin:0" id="ucYes">${esc(ok)}</button></div></div>`;
     document.body.appendChild(bg);
     const done=v=>{ bg.remove(); resolve(v); };
     bg.querySelector("#ucNo").onclick=()=>done(false);
-    bg.querySelector("#ucYes").onclick=()=>done(true);
+    bg.querySelector("#ucYes").onclick=()=>done(campo ? bg.querySelector("#ucCampo").value : true);
     bg.onclick=e=>{ if(e.target===bg) done(false); };
   });
 }
@@ -1070,7 +1094,7 @@ $("loginForm").addEventListener("submit", async (e)=>{
     token=d.access_token; localStorage.setItem("token",token); localStorage.setItem("username",d.username); enterApp();
   } catch(err){ msg($("loginMsg"),err.message,"error"); } finally { btn.disabled=false; }
 });
-function doLogout(){ token=""; localStorage.removeItem("token"); show($("appView"),false); show($("loginView"),true); }
+function doLogout(){ token=""; ACT.de=""; localStorage.removeItem("token"); show($("appView"),false); show($("loginView"),true); }
 $("logoutBtn").addEventListener("click", async ()=>{ try{ await api("/api/auth/logout",{method:"POST"});}catch(_){} doLogout(); });
 
 // ── Tabs ──
@@ -1147,8 +1171,9 @@ function selectTab(tab){
   show($("notasView"), tab==="notas");
   show($("pizarronView"), tab==="pizarron");
   show($("registroView"), tab==="registro");
+  show($("miasView"), tab==="mias");
   show($("actualidadView"), tab==="actualidad");
-  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas","pizarron","registro","actualidad"].includes(tab));
+  show($("listView"), !["mails","auto","envios","stats","estrategia","agenda","cuotas","usuarios","solicitudes","notas","pizarron","registro","mias","actualidad"].includes(tab));
   show($("loansSubtabs"), tab==="loans");
   show($("memberToolbar"), tab==="members");
   show($("cruceSection"), tab==="members");
@@ -1165,6 +1190,7 @@ function selectTab(tab){
   else if (tab==="notas") { loadNotas(); }
   else if (tab==="pizarron") { cerrarPizForm(); $("pizQ").value=""; PIZ.q=""; loadPizarron(null); }
   else if (tab==="registro") { loadRegistro(); }
+  else if (tab==="mias") { loadMias(); }
   else if (tab==="actualidad") { loadActualidad(); }
   else if (tab==="mails") { renderRecipients(); updatePreview();
     ensureCuotaMap().then(()=>{ updatePreview(); });
@@ -1323,7 +1349,7 @@ function renderFicha(d, volver){
 // Lo validado del registro de actividades, contado para todas y todos. Las cuentas
 // las hace el backend (app/panorama.py); acá solo se dibujan. Cada gráfico tiene su
 // tabla ("Ver tabla"), así ningún dato depende de pasar el mouse.
-const ACT = { periodo:"3m", datos:null, agenda:null, pedido:0 };
+const ACT = { periodo:"3m", de:"", datos:null, agenda:null, pedido:0 };
 const ACT_KPIS = [
   ["actividades","Actividades"], ["personas","Personas que vinieron"],
   ["talleres","Talleres con resumen"], ["participantes_talleres","Personas en talleres"],
@@ -1338,11 +1364,13 @@ async function loadActualidad(){
   msg($("actMsg"),"","");
   try {
     const [d, agenda] = await Promise.all([
-      api("/api/panorama?periodo="+encodeURIComponent(ACT.periodo)),
+      api("/api/panorama?periodo="+encodeURIComponent(ACT.periodo)+
+          (ACT.de?"&subcomision="+encodeURIComponent(ACT.de):"")),
       api("/api/agenda?dias=14").catch(()=>null),
     ]);
     if(pedido!==ACT.pedido) return;
     ACT.datos=d; ACT.agenda=agenda;
+    filtroSubcomision(d.subcomisiones||[]);
     renderActualidad();
   } catch(err){
     if(pedido!==ACT.pedido) return;
@@ -1351,6 +1379,16 @@ async function loadActualidad(){
     if(pedido===ACT.pedido) cont.classList.remove("viz-cargando");
   }
 }
+// Toda la biblioteca o una subcomisión. La biblioteca elige cualquiera; una
+// subcomisión, lo suyo (el backend no le deja pedir otra).
+function filtroSubcomision(opciones){
+  const sel=$("actDe");
+  show(sel, opciones.length>0);
+  const propia = !puede("registros");
+  sel.innerHTML = `<option value="">Toda la Bayer</option>` + opciones.map(x=>
+    `<option value="${esc(x)}"${x===ACT.de?" selected":""}>${propia?"Lo de ":""}${esc(x)}</option>`).join("");
+}
+$("actDe").addEventListener("change", e=>{ ACT.de=e.target.value; loadActualidad(); });
 document.querySelectorAll("#actPeriodo button").forEach(b=>b.addEventListener("click",()=>{
   ACT.periodo=b.dataset.periodo;
   document.querySelectorAll("#actPeriodo button").forEach(x=>x.classList.toggle("active",x===b));
@@ -1384,7 +1422,7 @@ const vizNum = (v)=> v==null || v==="" ? "" : `<span style="font-variant-numeric
 function renderActualidad(){
   const d=ACT.datos, cont=$("actContenido");
   destroyCharts();
-  $("actRango").textContent = `Del ${fechaAR(d.periodo.desde)} al ${fechaAR(d.periodo.hasta)} · se compara con ${fechaAR(d.anterior.desde)} al ${fechaAR(d.anterior.hasta)}`;
+  $("actRango").textContent = (d.subcomision?`Solo ${d.subcomision} · `:"") + `Del ${fechaAR(d.periodo.desde)} al ${fechaAR(d.periodo.hasta)} · se compara con ${fechaAR(d.anterior.desde)} al ${fechaAR(d.anterior.hasta)}`;
   const queViene = vizCard("Lo que viene", "Próximos 14 días en el calendario", vizProximos(ACT.agenda));
 
   if(!d.hay_datos){
@@ -1595,7 +1633,8 @@ async function loadRegistro(){
       : `<p class="empty">${REG.estado==="recibido" ? "No hay registros esperando revisión." : "Todavía no hay registros."}</p>`;
   } catch(err){ lista.innerHTML=""; msg($("regMsg"),esc(err.message),"error"); }
 }
-function tarjetaRegistro(r){
+// `soloVer`: la tarjeta tal como la ve una subcomisión (sin validar, corregir ni borrar).
+function tarjetaRegistro(r, {soloVer=false}={}){
   const d=r.datos, taller=r.clase==="taller";
   const cuando = taller ? `Mes de ${esc(d.mes)}` : `${fechaAR(d.fecha)}${d.hora_inicio?` · ${esc(d.hora_inicio)}${d.hora_fin?"–"+esc(d.hora_fin):""}`:""}`;
   const gente = taller
@@ -1607,7 +1646,7 @@ function tarjetaRegistro(r){
     ? '<span class="badge red" title="Ya hay otro registro parecido">⚠️ Posible duplicado</span>' : "";
   const inc = (d.incidente||{}).texto
     ? `<div class="sol-motivo">${d.incidente.requiere_atencion?"⚠️ ":""}${esc(d.incidente.texto)}</div>` : "";
-  const acciones = r.estado==="recibido"
+  const acciones = soloVer ? "" : r.estado==="recibido"
     ? `<button class="btn-sec" data-reg-validar="${esc(r.id)}">✓ Validar</button>
        <button class="btn-sec" data-reg-editar="${esc(r.id)}">Corregir</button>
        <button class="btn-sec danger" data-reg-descartar="${esc(r.id)}">Descartar</button>`
@@ -1618,17 +1657,43 @@ function tarjetaRegistro(r){
       <div><b>${esc(d.titulo)}</b>${regBadge(r.estado)} ${dup}
         <div class="sol-cuando">${cuando} · ${esc(r.espacio_nombre||"sin espacio")} · ${gente}</div></div>
       <div class="meta" style="margin:0;text-align:right">
-        ${taller?"Resumen mensual":"Actividad"}<br>${esc((d.quien_completa||{}).nombre||r.cargado_por||"")}</div>
+        ${taller?"Resumen mensual":"Actividad"}${d.subcomision?` · ${esc(d.subcomision)}`:""}<br>${esc((d.quien_completa||{}).nombre||r.cargado_por||"")}</div>
     </div>
     ${chips?`<div class="sol-nec">${chips}</div>`:""}
     ${d.descripcion||d.trabajado ? `<p class="sol-desc">${esc(d.descripcion||d.trabajado)}</p>`:""}
     ${d.valoracion?`<div class="meta" style="margin:.35rem 0 0">Valoración: ${"★".repeat(d.valoracion)}${"☆".repeat(5-d.valoracion)}</div>`:""}
     ${inc}
     ${r.estado==="descartado"&&r.motivo?`<div class="sol-motivo">Descartado: ${esc(r.motivo)}</div>`:""}
-    ${(r.historial||[]).some(h=>h.cambios)?`<div class="meta" style="margin:.35rem 0 0">Corregido por la biblioteca.</div>`:""}
-    <div class="row-btns" style="justify-content:flex-start">${acciones}</div>
+    ${r.corregido||(r.historial||[]).some(h=>h.cambios)?`<div class="meta" style="margin:.35rem 0 0">Corregido por la biblioteca.</div>`:""}
+    ${acciones?`<div class="row-btns" style="justify-content:flex-start">${acciones}</div>`:""}
   </div>`;
 }
+
+// ── Nuestras actividades (subcomisión) ──
+// Lo que registró la subcomisión de quien mira, tal como quedó. Solo para ver: lo
+// valida y lo corrige la biblioteca.
+const MIAS = { subcomision:"" };
+async function loadMias(){
+  const lista=$("miasLista"); lista.innerHTML=LOADER_SM; msg($("miasMsg"),"","");
+  try {
+    const d=await api("/api/registro/mios");
+    MIAS.subcomision=d.subcomision||"";
+    show($("miasNumeros"), !!d.subcomision);
+    if(!d.subcomision){
+      $("miasIntro").textContent="";
+      lista.innerHTML='<p class="empty">Tu usuario no tiene una subcomisión asignada. Pedile a la biblioteca que la cargue.</p>';
+      return;
+    }
+    $("miasIntro").innerHTML=`Las actividades de <b>${esc(d.subcomision)}</b> que se registraron. La biblioteca
+      las revisa, y lo validado cuenta en “Lo que anda pasando”.`;
+    lista.innerHTML = d.items.length
+      ? d.items.map(r=>tarjetaRegistro(r,{soloVer:true})).join("")
+      : `<p class="empty">Todavía no hay actividades registradas de ${esc(d.subcomision)}. Cuando la
+          biblioteca les pase un link para contar una actividad, lo que carguen aparece acá.</p>`;
+  } catch(err){ lista.innerHTML=""; msg($("miasMsg"),esc(err.message),"error"); }
+}
+$("miasRef").addEventListener("click", loadMias);
+$("miasNumeros").addEventListener("click", ()=>{ ACT.de=MIAS.subcomision; selectTab("actualidad"); });
 
 // Formulario de carga y corrección (mismos campos que el formulario público).
 function regCampo(campo, etiqueta, valor, {tipo="text", ancho=false}={}){
@@ -1658,6 +1723,9 @@ function regFormulario(r){
   const clase = r ? r.clase : (REG.clase || "actividad");
   const d = r ? r.datos : {};
   const c = REG.cat, esp = Object.fromEntries((c.espacios||[]).map(e=>[e.id,e.nombre]));
+  const subs = [...(c.subcomisiones||[])];
+  if(d.subcomision && !subs.includes(d.subcomision)) subs.push(d.subcomision);
+  const subsOpc = Object.fromEntries(subs.map(x=>[x,x]));
   const comun = `
     ${regArea("mejorar","¿Qué mejorar o qué hizo falta?", d.mejorar)}
     ${regArea("incidente","Problema o incidente", (d.incidente||{}).texto)}
@@ -1669,6 +1737,7 @@ function regFormulario(r){
     ${regCampo("titulo","Taller", d.titulo, {ancho:true})}
     ${regCampo("mes","Mes (AAAA-MM)", d.mes, {tipo:"month"})}
     ${regCampo("tallerista","Tallerista", d.tallerista)}
+    ${regSelect("subcomision","Subcomisión", subsOpc, d.subcomision, "Ninguna (de la biblioteca)")}
     ${regCampo("encuentros","Encuentros realizados", d.encuentros, {tipo:"number"})}
     ${regCampo("suspendidos","Suspendidos", d.suspendidos, {tipo:"number"})}
     ${regSelect("motivo_suspension","Motivo", c.suspension, d.motivo_suspension, "—")}
@@ -1690,7 +1759,8 @@ function regFormulario(r){
     ${regSelect("modalidad","Modalidad", c.modalidades, d.modalidad)}
     ${regCampo("a_cargo","A cargo de", d.a_cargo, {ancho:true})}
     ${regSelect("organiza","Organiza", c.organiza, d.organiza)}
-    ${regCampo("organiza_detalle","Subcomisión o institución", d.organiza_detalle)}
+    ${regSelect("subcomision","Subcomisión", subsOpc, d.subcomision, "—")}
+    ${regCampo("organiza_detalle","Otra subcomisión o institución", d.organiza_detalle)}
     ${regCampo("personas_total","Cuántas personas vinieron", d.personas_total, {tipo:"number"})}
     ${regCampo("primera_vez","Por primera vez", d.primera_vez, {tipo:"number"})}
     ${regSelect("acceso","Acceso", c.accesos, d.acceso)}
@@ -1726,6 +1796,9 @@ function regFormulario(r){
     b.style.color = REG.tem.includes(k) ? "#fff" : "";
   }));
   $("regTem").querySelectorAll(".on").forEach(b=>{ b.style.background="var(--magenta)"; b.style.color="#fff"; });
+  // Elegir una subcomisión es decir que la organizó ella (si no, el servidor la borra).
+  const selSub=$("regForm").querySelector('[data-reg="subcomision"]'), selOrg=$("regForm").querySelector('[data-reg="organiza"]');
+  if(selSub && selOrg) selSub.addEventListener("change",()=>{ if(selSub.value) selOrg.value="subcomision"; });
   $("regCancelar").onclick=()=>{ show($("regForm"),false); $("regForm").innerHTML=""; REG.editando=null; };
   $("regGuardar").onclick=()=>regGuardar(r);
   $("regForm").scrollIntoView({behavior:"smooth", block:"nearest"});
@@ -1803,6 +1876,8 @@ async function regLinkFormulario(){
         Object.entries(esp).map(([k,v])=>`<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select></div>
       <div><label>Tipo de actividad</label><select id="lkTipo"><option value="">—</option>${
         Object.entries(c.tipos).map(([k,v])=>`<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select></div>
+      ${(c.subcomisiones||[]).length?`<div><label>De una subcomisión</label><select id="lkSub">
+        <option value="">No</option>${c.subcomisiones.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("")}</select></div>`:""}
       <div><label>Vence (opcional)</label><input id="lkVence" type="date" /></div>
     </div>
     <div class="row-btns"><button class="btn-sec" id="lkCancelar">Cancelar</button>
@@ -1814,6 +1889,8 @@ async function regLinkFormulario(){
     $("lkTitulo").value=s.titulo||""; $("lkFecha").value=(s.inicio||"").slice(0,10);
     $("lkInicio").value=(s.inicio||"").slice(11,16); $("lkFin").value=(s.fin||"").slice(11,16);
     $("lkEspacio").value=s.espacio_id||""; $("lkClase").value="actividad";
+    const sub=(s.solicitante||{}).subcomision||"";
+    if($("lkSub") && sub && [...$("lkSub").options].some(o=>o.value===sub)) $("lkSub").value=sub;
   });
   $("lkCancelar").onclick=()=>{ show($("regLinkForm"),false); $("regLinkForm").innerHTML=""; };
   $("lkGuardar").onclick=async ()=>{
@@ -1823,7 +1900,8 @@ async function regLinkFormulario(){
       // El general no precarga nada: su nombre es para reconocerlo en la lista.
       const precarga= clase==="general" ? {} : {titulo:$("lkTitulo").value.trim(), fecha:$("lkFecha").value||null,
         hora_inicio:$("lkInicio").value||"", hora_fin:$("lkFin").value||"",
-        espacio_id:$("lkEspacio").value||"", tipo:$("lkTipo").value||""};
+        espacio_id:$("lkEspacio").value||"", tipo:$("lkTipo").value||"",
+        subcomision:$("lkSub")?$("lkSub").value:""};
       Object.keys(precarga).forEach(k=>{ if(!precarga[k]) delete precarga[k]; });
       await api("/api/registro/links",{method:"POST", body:JSON.stringify({
         clase, titulo:$("lkTitulo").value.trim(),
@@ -3172,8 +3250,8 @@ function renderAutoForm(r, last){
 // Se usa igual en la pestaña "Historial de envíos" (todo) y dentro de cada
 // reporte de Automáticos (filtrado por report_id). El detalle de cada envío
 // (destinatarios + mensaje) se pide aparte, recién cuando se despliega.
-const ORIGEN_LBL={auto:'Automático', manual:'Mails'};
-const TRIG_LBL={auto:'Programado', manual:'Manual', prueba:'Prueba'};
+const ORIGEN_LBL={auto:'Automático', manual:'Mails', avisos:'Aviso de solicitud'};
+const TRIG_LBL={auto:'Programado', manual:'Manual', prueba:'Prueba', resolucion:'Al resolver'};
 const ST_LBL={sent:'enviado', skipped:'sin email', error:'error', simulado:'simulado'};
 const ST_CLS={sent:'badge green', skipped:'badge gray', error:'badge red', simulado:'badge gray'};
 let enviosOrigen="";
@@ -3625,7 +3703,53 @@ function renderSolicitudes(){
       : "Todavía no hay solicitudes. Pedí un espacio con “+ Solicitar espacio”.")+"</p>";
     return;
   }
-  $("solLista").innerHTML=items.map(tarjetaSolicitud).join("");
+  const g=solDatos.google;
+  const aviso = g && !g.configurado
+    ? `<p class="sol-google-aviso">Las reservas aprobadas se ven en el calendario de la app, pero
+        todavía no se publican en Google Calendar: falta darle acceso a la app al calendario
+        “${esc(g.calendario)}”.</p>` : "";
+  $("solLista").innerHTML=aviso+items.map(tarjetaSolicitud).join("");
+}
+
+// Lo que pasa afuera después de resolver tarda unos segundos: se vuelve a mirar sin
+// borrar el mensaje de "listo" ni mostrar el cargando.
+async function refrescarSolicitudesEnSilencio(){
+  try {
+    solDatos = await api("/api/solicitudes"+(solEstadoFiltro?`?estado=${solEstadoFiltro}`:""));
+    renderSolicitudes();
+  } catch(_){}
+}
+function refrescarDespuesDeGoogle(){
+  if(solDatos.google && solDatos.google.configurado) setTimeout(refrescarSolicitudesEnSilencio, 4000);
+}
+
+// Si salió en Google Calendar. Lo ve solo quien aprueba: es un dato de gestión.
+function solGoogle(s){
+  const g=solDatos.google;
+  if(!g || !g.configurado) return "";
+  if(s.google_pendiente && s.google_error)
+    return `<div class="sol-ext error">⚠️ No se pudo ${s.estado==="aprobada"?"publicar en":"sacar de"} Google Calendar:
+      ${esc(s.google_error)} Se vuelve a intentar sola cada 15 minutos.</div>`;
+  if(s.google_pendiente)
+    return `<div class="sol-ext">📅 ${s.estado==="aprobada"?"Publicándose en":"Sacándose de"} Google Calendar…</div>`;
+  if(s.estado==="aprobada" && s.google_eventos)
+    return `<div class="sol-ext">📅 Publicada en Google Calendar (${esc(g.calendario)})</div>`;
+  return "";
+}
+
+// El último aviso por mail a quien lo pidió. También solo para quien aprueba.
+const AVISO_QUE={aprobar:"la aprobación", rechazar:"el rechazo", observar:"el pedido de cambios",
+                 cancelar:"la cancelación"};
+function solAviso(s){
+  const a=(s.avisos||[]).slice(-1)[0]; if(!a) return "";
+  const que=AVISO_QUE[a.que]||"lo resuelto";
+  if(a.estado==="sent")
+    return `<div class="sol-ext">✉️ Se le avisó ${que} por mail a ${esc(a.a)}</div>`;
+  if(a.estado==="simulado")
+    return `<div class="sol-ext">✉️ El aviso de ${que} se simuló (mails en modo prueba): no le llegó a ${esc(a.a)}</div>`;
+  if(a.estado==="sin_email")
+    return `<div class="sol-ext error">✉️ No se le pudo avisar ${que}: su usuario no tiene mail cargado.</div>`;
+  return `<div class="sol-ext error">✉️ No salió el aviso de ${que} a ${esc(a.a)}: ${esc(a.detalle||"error")}</div>`;
 }
 
 const SOL_COLOR = {pendiente:"gray", aprobada:"green", observaciones:"magenta",
@@ -3681,6 +3805,7 @@ function tarjetaSolicitud(s){
       ${s.abierta_publico?"Abierta al público · ":""}${s.arancelada?"Arancelada":"Gratuita"}
     </div>
     ${nec}${cambio}${motivo}
+    ${solDatos.puede_resolver?solGoogle(s)+solAviso(s):""}
     ${acciones.length?`<div class="row-btns">${acciones.join("")}</div>`:""}
   </article>`;
 }
@@ -3816,7 +3941,8 @@ function solResolverModal(s){
     </div>
     <div id="rvAviso"></div>
     <label for="rvMotivo">Motivo o comentario
-      <span class="meta">(obligatorio para rechazar o pedir cambios)</span></label>
+      <span class="meta">(obligatorio para rechazar o pedir cambios; va en el mail que le
+      llega a quien lo pidió)</span></label>
     <textarea id="rvMotivo" rows="2"></textarea>
     <div class="row-btns" style="flex-wrap:wrap">
       <button class="btn-sec" id="rvNo">Cerrar</button>
@@ -3864,8 +3990,11 @@ function solResolverModal(s){
         decision, motivo:bg.querySelector("#rvMotivo").value, cambios})});
       cerrar();
       await loadSolicitudes();        // …y recién después el aviso, si no se pisa
-      msg($("solMsg"),{aprobar:"Aprobada. Ya aparece en el calendario.",
+      const google = solDatos.google && solDatos.google.configurado;
+      msg($("solMsg"),{aprobar:"Aprobada. Ya aparece en el calendario"+
+                         (google?" y en unos segundos también en Google Calendar.":"."),
                        rechazar:"Rechazada.",observar:"Devuelta con observaciones."}[decision],"ok");
+      refrescarDespuesDeGoogle();
     } catch(err){ msg(bg.querySelector("#rvMsg"),err.message,"error"); }
     finally { restore(); }
   };
@@ -3881,12 +4010,19 @@ document.addEventListener("click", async (e)=>{
   if(b.dataset.sol==="resolver") return solResolverModal(s);
   if(b.dataset.sol==="editar")   return solFormulario(s);
   if(b.dataset.sol==="cancelar"){
-    if(!await uiConfirm({title:"Cancelar la reserva", danger:true, ok:"Cancelar la reserva",
+    // Si la cancela la biblioteca y no quien la pidió, a esa persona le llega un mail.
+    const ajena = solDatos.puede_resolver && (s.solicitante||{}).usuario!==(ME&&ME.username);
+    const r=await uiConfirm({title:"Cancelar la reserva", danger:true, ok:"Cancelar la reserva",
         message:`Se da de baja <b>${esc(s.titulo)}</b>`+
-                (s.estado==="aprobada"?" y sale del calendario.":".")})) return;
+                (s.estado==="aprobada"?" y sale del calendario.":".")+
+                (ajena?" A quien la pidió le llega un aviso por mail.":""),
+        campo: ajena?"Motivo (opcional, va en el aviso)":""});
+    if(r===false) return;
     try{
-      await api(`/api/solicitudes/${s.id}/cancelar`,{method:"POST",body:"{}"});
+      await api(`/api/solicitudes/${s.id}/cancelar`,{method:"POST",
+        body:JSON.stringify({motivo: typeof r==="string" ? r : ""})});
       await loadSolicitudes();
+      refrescarDespuesDeGoogle();
     } catch(err){ msg($("solMsg"),err.message,"error"); }
   }
 });

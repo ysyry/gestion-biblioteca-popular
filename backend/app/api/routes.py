@@ -6,7 +6,7 @@ import logging
 from collections import Counter
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from ..auth import (
@@ -25,6 +25,8 @@ from .. import auto_mail
 from .. import historial
 from .. import tracking
 from .. import agenda
+from .. import avisos
+from .. import calendario_google
 from .. import cuotas
 from .. import pagos
 from .. import cache
@@ -215,6 +217,14 @@ async def registro_links(_: Sesion = Depends(requiere(permisos.REGISTROS))):
             "publico_configurado": bool(settings.app_public_url)}
 
 
+@router.get("/registro/mios", tags=["registro"])
+async def registro_mios(s: Sesion = Depends(requiere(permisos.REGISTROS_PROPIOS))):
+    """Los registros de las actividades de la subcomisión de quien mira (solo ver)."""
+    items = registro.de_subcomision(s.subcomision) if s.subcomision else []
+    return {"items": [registro.para_subcomision(r) for r in items],
+            "subcomision": s.subcomision}
+
+
 @router.post("/registro/links", tags=["registro"])
 async def registro_link_crear(body: dict = Body(...), s: Sesion = Depends(requiere(permisos.REGISTROS))):
     """Crea un link: general, de una actividad (precargado) o de un taller (mensual)."""
@@ -307,10 +317,21 @@ async def registro_borrar(reg_id: str, _: Sesion = Depends(requiere(permisos.REG
 
 @router.get("/panorama", tags=["registro"])
 async def panorama_ver(periodo: str = Query("3m", pattern="^(mes|3m|12m|anio|anio_anterior)$"),
-                       _: Sesion = Depends(requiere(permisos.ACTUALIDAD))):
+                       subcomision: str = Query("", max_length=120),
+                       s: Sesion = Depends(requiere(permisos.ACTUALIDAD))):
     """"Lo que anda pasando en la Bayer": lo validado del registro, contado y comparado
-    con el período anterior. Lo ven todos los roles: no incluye datos sensibles."""
-    return {**panorama.armar(periodo), "periodos": panorama.PERIODOS}
+    con el período anterior. Lo ven todos los roles: no incluye datos sensibles.
+
+    Con `subcomision`, solo lo de esa subcomisión. La biblioteca puede mirar cualquiera;
+    una subcomisión, toda la biblioteca o lo suyo.
+    """
+    de = subcomision.strip()
+    ve_todo = s.puede(permisos.REGISTROS)
+    if de and not ve_todo and registro.normalizar(de) != registro.normalizar(s.subcomision):
+        raise HTTPException(status_code=403, detail="Solo podés ver lo de tu subcomisión.")
+    opciones = usuarios.subcomisiones() if ve_todo else ([s.subcomision] if s.subcomision else [])
+    return {**panorama.armar(periodo, subcomision=de or None), "periodos": panorama.PERIODOS,
+            "subcomisiones": opciones}
 
 
 # ── Formulario público de registro (sin usuario) ──────────────────────────────
@@ -1100,10 +1121,13 @@ async def solicitudes_listar(estado: str | None = Query(None),
         items = solicitudes.listar(estado=estado)
     else:
         items = [x for x in solicitudes.listar(estado=estado) if _mia(s, x)]
+    resuelve = s.puede(permisos.SOLICITUDES_RESOLVER)
     return {
         "items": [solicitudes.con_espacio(x) for x in items],
-        "puede_resolver": s.puede(permisos.SOLICITUDES_RESOLVER),
-        "pendientes": solicitudes.pendientes() if s.puede(permisos.SOLICITUDES_RESOLVER) else 0,
+        "puede_resolver": resuelve,
+        "pendientes": solicitudes.pendientes() if resuelve else 0,
+        # A qué Google Calendar va lo aprobado y si está listo (solo para quien aprueba).
+        "google": calendario_google.estado() if resuelve else None,
         "estados": [{"id": e, "titulo": solicitudes.ETIQUETAS[e]} for e in solicitudes.ESTADOS],
         "repeticiones": [{"id": k, "titulo": v} for k, v in solicitudes.REPETICIONES.items()],
     }
@@ -1140,23 +1164,40 @@ async def solicitudes_crear(body: dict = Body(...),
     return solicitudes.con_espacio(creada)
 
 
+def _despues_de_cambiar(tareas: BackgroundTasks, s: Sesion, sol: dict, aviso: str | None) -> None:
+    """Lo que sale para afuera cuando cambia una solicitud, después de responder.
+
+    Google y el mail pueden tardar o fallar: la respuesta no los espera, y si fallan
+    queda anotado en la solicitud (Google además se reintenta solo).
+    """
+    if sol.get("google_pendiente"):
+        tareas.add_task(calendario_google.sincronizar, sol["id"])
+    if aviso:
+        tareas.add_task(avisos.avisar, sol["id"], aviso, por=s.usuario, por_uid=s.uid)
+
+
 @router.put("/solicitudes/{sid}", tags=["solicitudes"])
-async def solicitudes_editar(sid: str, body: dict = Body(...),
+async def solicitudes_editar(sid: str, tareas: BackgroundTasks, body: dict = Body(...),
                              s: Sesion = Depends(requiere(permisos.SOLICITUDES_CREAR))):
     """Corregir el pedido. Solo quien lo hizo (o quien resuelve), y solo sin resolver."""
     sol = _ver_o_404(s, sid)
     if not (s.puede(permisos.SOLICITUDES_RESOLVER) or _mia(s, sol)):
         raise HTTPException(status_code=403, detail="Solo podés editar tus propias solicitudes.")
     try:
-        return solicitudes.con_espacio(solicitudes.editar(sid, body or {}, por=s.usuario))
+        editada = solicitudes.editar(sid, body or {}, por=s.usuario)
     except (solicitudes.ErrorSolicitud, espacios.ErrorEspacio) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _despues_de_cambiar(tareas, s, editada, None)
+    return solicitudes.con_espacio(editada)
 
 
 @router.post("/solicitudes/{sid}/resolver", tags=["solicitudes"])
-async def solicitudes_resolver(sid: str, body: dict = Body(...),
+async def solicitudes_resolver(sid: str, tareas: BackgroundTasks, body: dict = Body(...),
                                s: Sesion = Depends(requiere(permisos.SOLICITUDES_RESOLVER))):
-    """Aprobar (pudiendo ajustar fecha/horario/espacio), rechazar o pedir cambios."""
+    """Aprobar (pudiendo ajustar fecha/horario/espacio), rechazar o pedir cambios.
+
+    Después se publica en Google Calendar y se le avisa por mail a quien lo pidió.
+    """
     _ver_o_404(s, sid)
     b = body or {}
     try:
@@ -1164,21 +1205,23 @@ async def solicitudes_resolver(sid: str, body: dict = Body(...),
                                  motivo=b.get("motivo", ""), cambios=b.get("cambios") or None)
     except (solicitudes.ErrorSolicitud, espacios.ErrorEspacio) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _despues_de_cambiar(tareas, s, r, b.get("decision"))
     return solicitudes.con_espacio(r)
 
 
 @router.post("/solicitudes/{sid}/cancelar", tags=["solicitudes"])
-async def solicitudes_cancelar(sid: str, body: dict = Body(default={}),
+async def solicitudes_cancelar(sid: str, tareas: BackgroundTasks, body: dict = Body(default={}),
                                s: Sesion = Depends(requiere(permisos.SOLICITUDES_CREAR))):
     """Dar de baja. Quien la pidió puede cancelar la suya; quien resuelve, cualquiera."""
     sol = _ver_o_404(s, sid)
     if not (s.puede(permisos.SOLICITUDES_RESOLVER) or _mia(s, sol)):
         raise HTTPException(status_code=403, detail="Solo podés cancelar tus propias solicitudes.")
     try:
-        return solicitudes.con_espacio(
-            solicitudes.cancelar(sid, por=s.usuario, motivo=(body or {}).get("motivo", "")))
+        c = solicitudes.cancelar(sid, por=s.usuario, motivo=(body or {}).get("motivo", ""))
     except solicitudes.ErrorSolicitud as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _despues_de_cambiar(tareas, s, c, "cancelar")
+    return solicitudes.con_espacio(c)
 
 
 # ── Cuotas societarias (planilla de Google, solo lectura) ──────────────────────
@@ -1366,11 +1409,12 @@ async def auto_history(rid: str, limit: int = Query(20, ge=1, le=100),
 
 # ── Historial de envíos (automáticos + manuales) ──────────────────────────────
 @router.get("/envios", tags=["envios"])
-async def envios_listar(origen: str | None = Query(None, pattern="^(auto|manual)$"),
+async def envios_listar(origen: str | None = Query(None, pattern="^(auto|manual|avisos)$"),
                         report_id: str | None = Query(None),
                         limit: int = Query(50, ge=1, le=200),
                         _: Sesion = Depends(requiere(permisos.MAILS))):
-    """Lista de envíos hechos: los automáticos y los de la pestaña Mails."""
+    """Lista de envíos hechos: los automáticos, los de la pestaña Mails y los avisos de
+    solicitudes de espacio."""
     return {"items": historial.listar(origen=origen, report_id=report_id, limit=limit),
             "seguimiento_activo": tracking.enabled()}
 

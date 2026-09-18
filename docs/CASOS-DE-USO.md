@@ -117,8 +117,12 @@ organización** — comisión directiva y subcomisiones. Eso implica tres cosas 
      **se crea el evento en el Google Calendar de la biblioteca** (ver CU-A5).
    - **Rechazar** → pide motivo (obligatorio) → queda **Rechazada**.
    - **Pedir cambios** → deja un comentario → vuelve al solicitante como **Con observaciones**.
-5. El solicitante ve el cambio de estado en su bandeja *(y opcionalmente recibe un mail —
-   el módulo de envío ya existe)*.
+5. El solicitante ve el cambio de estado en su bandeja y **recibe un mail** con lo que se
+   resolvió: qué quedó aprobado (y qué se había pedido, si se cambió), el motivo del
+   rechazo o los cambios que se piden. También si la biblioteca le cancela una reserva.
+   No se manda si quien resuelve o cancela es la misma persona que pidió, ni a quien no
+   tiene mail cargado en su usuario (queda anotado en la solicitud). Cada aviso queda en el
+   historial de envíos, con el filtro "Avisos".
 
 **Reglas:**
 - Solo bibliotecarias y CD resuelven. Una subcomisión **no** aprueba sus propias solicitudes.
@@ -130,21 +134,27 @@ organización** — comisión directiva y subcomisiones. Eso implica tres cosas 
 ---
 
 ### CU-A5 · Publicar la reserva en Google Calendar
-**Actor:** el sistema, al aprobarse una solicitud · **Decidido:** sí, se escribe en Google
+**Actor:** el sistema, al aprobarse una solicitud · **Decidido:** sí, se escribe en Google,
+en el calendario **Bayer Band**
 
 1. Al aprobar (CU-A3), la app crea el evento en el Google Calendar de la biblioteca con el
-   título, horario, espacio y responsable definitivos.
-2. Si después se reprograma o se cancela, el evento se **actualiza o se borra** en Google.
+   título, horario, espacio y responsable definitivos. Si la reserva se repite, cada fecha
+   es un evento.
+2. Si después se reprograma, se devuelve con observaciones o se cancela, el evento se
+   **actualiza o se borra** en Google.
 3. Si Google falla, la reserva **igual queda aprobada** en la app y se marca "pendiente de
-   publicar" para reintentar. Nunca se pierde una aprobación por un error de Google.
+   publicar"; se reintenta sola cada 15 minutos. Nunca se pierde una aprobación por un
+   error de Google. Quien aprueba ve en cada tarjeta si ya salió en Google o qué falló.
 
-**Qué hace falta para esto:**
-- La cuenta de servicio que ya se usa para las cuotas (`google-service-account.json`)
-  necesita permiso de **"Hacer cambios en los eventos"** sobre el calendario destino,
-  y el scope `calendar.events` (hoy solo tiene `spreadsheets.readonly`).
-- Hay que definir **a qué calendario van las reservas**. Hoy están configurados cuatro:
-  Talleres, Bayer Experimental, Bayer Band y Vencimientos. → **A confirmar** cuál es el
-  destino (se deja configurable por variable de entorno, así se cambia sin tocar código).
+**Reglas:** la app manda. Si alguien toca el evento en Google, la próxima vez que la
+reserva cambie en la app se pisa con lo de la app.
+
+**Qué hace falta en Google (una sola vez):**
+- Habilitar la **Google Calendar API** en el proyecto de la cuenta de servicio que ya se
+  usa para las cuotas.
+- Compartir el calendario Bayer Band con esa cuenta de servicio, con el permiso
+  **"Hacer cambios en los eventos"**.
+- El destino se cambia con la variable `RESERVAS_CALENDARIO`, sin tocar código.
 
 ---
 
@@ -312,10 +322,9 @@ menú lateral se apila arriba y las tablas se desbordan.
 2. Las **tablas se convierten en tarjetas** apiladas, legibles sin zoom ni scroll horizontal.
 3. Los botones y campos tienen tamaño de dedo (≥ 44 px) y los inputs no provocan zoom en iOS.
 4. Los formularios largos (solicitud, alta de ítem) se muestran en pasos.
-5. Puede **agregar la app a la pantalla de inicio** y abrirla como una aplicación
-   (PWA: ícono, nombre, sin barra del navegador).
 
-**Reglas:** una sola base de código, responsive. No hay app nativa ni tiendas.
+**Reglas:** una sola base de código, responsive. Se usa desde el navegador: no hay app
+nativa, ni tiendas, ni app instalable (PWA).
 
 ---
 
@@ -390,7 +399,10 @@ Pensado primero para celular, en **3 pasos cortos**, completable en menos de 3 m
 - **Temática** (1 a 3): literatura · infancias · memoria y DDHH · géneros · ambiente / huerta ·
   música · artes visuales · teatro · ciencia y tecnología · oficios · salud · barrio y comunidad · otra
 - **A cargo**: nombre(s) y rol (tallerista, subcomisión, invitada/o externa/o, bibliotecaria)
-- **Organiza**: la biblioteca · una subcomisión (cuál) · junto con otra institución (cuál)
+- **Organiza**: la biblioteca · una subcomisión (cuál, de la lista de subcomisiones de la
+  app) · junto con otra institución (cuál). Si el link sale de una reserva de una
+  subcomisión, ya viene elegida. El resumen mensual de un taller también dice si es de
+  una subcomisión.
 
 **Paso 2 — Quiénes vinieron**
 - **Cantidad total de personas** *(obligatorio)*, con tilde "es aproximado"
@@ -486,7 +498,9 @@ marcados "requiere atención" aparecen además como aviso en el inicio.
 
 Una sección que muestra lo que se registró y se validó, contado. Arriba se elige el
 período (este mes, últimos 3 o 12 meses, este año, el año pasado) y todo se compara
-con el período anterior del mismo largo.
+con el período anterior del mismo largo. También se elige de quién: **toda la Bayer** o
+**una subcomisión**. La biblioteca puede mirar cualquiera; una subcomisión, toda la
+biblioteca o lo suyo.
 
 1. **Números del período:** actividades, personas que vinieron, talleres con resumen,
    personas en talleres, gente que vino por primera vez y horas de actividad.
@@ -531,6 +545,19 @@ Filtros: período, tipo, temática, espacio, organizador, subcomisión.
 - **Memoria anual** armada: listado de actividades, totales y gráficos. Base para la
   asamblea y las actas.
 - **Ficha de una actividad** en PDF, con fotos, para prensa o difusión.
+
+---
+
+### CU-E8 · Nuestras actividades (subcomisión)
+**Actor:** Subcomisión · **Frecuencia:** mensual
+
+1. Entra a **Agenda → Nuestras actividades** y ve lo que se registró de las actividades y
+   talleres de su subcomisión, del más nuevo al más viejo, con su estado (recibido o
+   validado). Lo descartado no aparece.
+2. Toca **"Ver nuestros números"** y va a *Lo que anda pasando* filtrado por su subcomisión.
+
+**Reglas:** solo ver. Lo valida y lo corrige la biblioteca. No ve registros de otras
+subcomisiones ni la bandeja completa.
 
 ---
 
@@ -728,22 +755,18 @@ solo mediante el código del link, límite de envíos y sin mostrar nunca datos 
 | 7 | **Notas de socios** | **Solo ver.** Se siguen escribiendo en Koha; la app no escribe ahí |
 | 8 | **Pizarrón** | **Solo bibliotecarias.** La Comisión Directiva no lo ve (excepción a la decisión 4) |
 | 9 | **Categorías del registro** | La lista propuesta de tipos, temáticas y franjas etarias **sirve**. El registro es de uso interno, no para CONABIP |
+| 10 | **Google Calendar de las reservas** | Las reservas aprobadas van al calendario **Bayer Band** (configurable) |
+| 11 | **Aviso por mail al resolver** | **Sí**: a quien pidió le llega un mail cuando se aprueba, rechaza, devuelve o cancela |
+| 12 | **Subcomisiones y registros** | **Sí, solo las suyas**: ven sus registros y sus números, sin tocar nada |
 
 ### 11.2 Todavía abiertas
 
-1. **A qué Google Calendar** van las reservas aprobadas: hoy hay cuatro configurados
-   (Talleres, Bayer Experimental, Bayer Band, Vencimientos). Se deja **configurable**, pero
-   hay que decir cuál es el destino por defecto.
-2. **Aviso por mail** al solicitante cuando se resuelve su pedido: ¿sí o no? El módulo de
-   envío ya está hecho, es sumarlo.
-3. **Inventario**: ¿editan **solo** bibliotecarias y CD, o también el referente de cada ítem
+1. **Inventario**: ¿editan **solo** bibliotecarias y CD, o también el referente de cada ítem
    puede actualizar el suyo?
-4. **Espacios**: hace falta la lista real de espacios de la biblioteca con su capacidad.
-5. **Subcomisiones**: hace falta la lista real y quiénes las integran (para dar de alta usuarios).
-6. **Encuesta al público** (CU-E6): ¿ahora o más adelante? *Recomendación:* más adelante,
+2. **Espacios**: hace falta la lista real de espacios de la biblioteca con su capacidad.
+3. **Subcomisiones**: hace falta la lista real y quiénes las integran (para dar de alta usuarios).
+4. **Encuesta al público** (CU-E6): ¿ahora o más adelante? *Recomendación:* más adelante,
    cuando el registro básico ya se use.
-7. **Subcomisiones y registros**: ¿ven los registros y estadísticas de sus propias
-   actividades? *Recomendación:* sí, solo las suyas.
 
 ---
 
@@ -752,11 +775,11 @@ solo mediante el código del link, límite de envíos y sin mostrar nunca datos 
 | # | Entrega | Estado | Por qué en este lugar |
 |---|---|---|---|
 | 1 | **Usuarios y roles** + menú por rol | En desarrollo | Sin esto ninguna sección nueva se puede mostrar a nadie |
-| 2 | **Calendario + solicitudes de espacio** | En desarrollo | Es el pedido más concreto y el que más se usa |
+| 2 | **Calendario + solicitudes de espacio** | Hecho (falta dar acceso al calendario en Google) | Es el pedido más concreto y el que más se usa |
 | 3 | **Notas de socios** (ver, CU-F1 a F3) | Hecho | Chico, uso diario, reusa el acceso a Koha que ya existe |
 | 4 | **Pizarrón semanal** | Hecho | Chico y autónomo, uso diario del equipo |
 | 5 | **Registro de actividades** — E·1 | Hecho | Cuanto antes arranca, antes hay histórico; el formulario público se hace para celular desde el inicio |
-| 6 | **Versión celular** (menú inferior, tarjetas, PWA) | — | Transversal: conviene antes de sumar más pantallas |
+| 6 | **Versión celular** (menú inferior, tarjetas) | — | Transversal: conviene antes de sumar más pantallas |
 | 7 | **Talleres y actividades** | — | Alimenta el calendario y el registro |
-| 8 | **Registro** — E·2 y E·3 | E·2 hecho (sin memoria anual) | El tablero rinde con algunos meses de datos; "faltan registrar" necesita talleres |
+| 8 | **Registro** — E·2 y E·3 | E·2 hecho (sin memoria anual), con vista por subcomisión | El tablero rinde con algunos meses de datos; "faltan registrar" necesita talleres |
 | 9 | **Inventario** | — | El más autónomo, se puede hacer sin depender del resto |

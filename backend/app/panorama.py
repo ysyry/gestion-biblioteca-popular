@@ -6,7 +6,8 @@ mes a mes, qué tipos y temáticas convocan, a qué edades se llega, qué días 
 funcionan, cómo se entera la gente, cómo vienen los talleres y lo último que pasó.
 
 Esta sección la ven **todos los roles**, subcomisiones incluidas, así que acá no entra
-nada sensible: ni incidentes, ni contactos, ni valoraciones, ni dinero.
+nada sensible: ni incidentes, ni contactos, ni valoraciones, ni dinero. Se puede mirar
+toda la biblioteca o solo lo de una subcomisión.
 
 Los promedios se calculan por actividad (no totales): una charla con 40 personas no se
 compara con un taller de 12 encuentros de 10.
@@ -121,12 +122,13 @@ def _tendencia(serie: list[int]) -> str | None:
     return "crece" if cambio >= 0.2 else "baja" if cambio <= -0.2 else "estable"
 
 
-def armar(clave: str = "3m", hoy: date | None = None) -> dict:
-    """Todo lo que muestra la sección para un período."""
+def armar(clave: str = "3m", hoy: date | None = None, subcomision: str | None = None) -> dict:
+    """Todo lo que muestra la sección para un período (de toda la biblioteca o de una
+    subcomisión)."""
     desde, hasta = periodo(clave, hoy)
     desde_ant, hasta_ant = anterior(desde, hasta)
-    regs = registro.validados_entre(desde, hasta)
-    previos = registro.validados_entre(desde_ant, hasta_ant)
+    regs = registro.validados_entre(desde, hasta, subcomision)
+    previos = registro.validados_entre(desde_ant, hasta_ant, subcomision)
     actividades = [r for r in regs if r["clase"] == "actividad"]
     talleres = _talleres(regs)
 
@@ -229,6 +231,7 @@ def armar(clave: str = "3m", hoy: date | None = None) -> dict:
         "periodo": {"clave": clave, "etiqueta": PERIODOS[clave],
                     "desde": desde.isoformat(), "hasta": hasta.isoformat()},
         "anterior": {"desde": desde_ant.isoformat(), "hasta": hasta_ant.isoformat()},
+        "subcomision": subcomision or "",
         "hay_datos": bool(regs),
         "numeros": numeros,
         "por_mes": list(por_mes.values()),

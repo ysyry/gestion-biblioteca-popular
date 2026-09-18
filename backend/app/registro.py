@@ -17,6 +17,9 @@ Todo lo que entra queda **"recibido"** hasta que una bibliotecaria lo revisa: so
 **validado** cuenta después en las estadísticas. Nada de esto guarda datos personales
 del público: la asistencia va en números.
 
+Si la actividad o el taller es de una **subcomisión**, el registro lo dice (`subcomision`,
+con el mismo nombre que tienen sus usuarios): así cada subcomisión ve lo suyo.
+
 Guardado: `storage`. `registro_links` para los links y una clave por año para los
 registros (`registros_actividad_2026`), porque esto crece para siempre.
 """
@@ -29,7 +32,7 @@ import threading
 import unicodedata
 from datetime import date, datetime, timezone
 
-from . import espacios, storage
+from . import espacios, storage, usuarios
 
 logger = logging.getLogger("registro")
 
@@ -175,7 +178,23 @@ def catalogos() -> dict:
     return {"tipos": TIPOS, "tematicas": TEMATICAS, "franjas": FRANJAS,
             "modalidades": MODALIDADES, "difusion": DIFUSION, "accesos": ACCESOS,
             "organiza": ORGANIZA, "continua": CONTINUA, "suspension": SUSPENSION,
-            "espacios": [{"id": e["id"], "nombre": e["nombre"]} for e in espacios.listar()]}
+            "espacios": [{"id": e["id"], "nombre": e["nombre"]} for e in espacios.listar()],
+            "subcomisiones": usuarios.subcomisiones()}
+
+
+def subcomision_de(valor) -> str:
+    """El nombre de la subcomisión tal como la conoce la app ("prensa " → "Prensa").
+
+    Si no coincide con ninguna conocida se guarda igual, como vino: puede ser una que
+    todavía no tiene usuarios, y la biblioteca la corrige al validar.
+    """
+    texto = _txt(valor, 120)
+    clave = normalizar(texto)
+    return next((c for c in usuarios.subcomisiones() if normalizar(c) == clave), texto)
+
+
+def es_de(reg: dict, subcomision: str) -> bool:
+    return bool(subcomision) and normalizar(reg["datos"].get("subcomision", "")) == normalizar(subcomision)
 
 
 # ── Links ───────────────────────────────────────────────────────────────────
@@ -212,6 +231,10 @@ def crear_link(datos: dict, por: str) -> dict:
         precarga["tipo"] = _clave_de(precarga["tipo"], TIPOS, "tipo")
     if precarga.get("tematicas"):
         precarga["tematicas"] = _claves(precarga["tematicas"], TEMATICAS, "tematicas")
+    if precarga.get("subcomision"):
+        precarga["subcomision"] = subcomision_de(precarga["subcomision"])
+        if clase == "actividad":
+            precarga["organiza"] = "subcomision"
 
     link = {
         "id": secrets.token_hex(4),
@@ -374,6 +397,12 @@ def limpiar_actividad(datos: dict) -> dict:
     espacio_id = _txt(datos.get("espacio_id"), 40)
     if espacio_id and not espacios.obtener(espacio_id):
         espacio_id = ""
+    # La subcomisión cuenta solo si la organizó una: si se corrige a "la biblioteca", se va.
+    subcomision = subcomision_de(datos.get("subcomision"))
+    organiza = _clave_de(datos.get("organiza"), ORGANIZA, "organiza") or \
+        ("subcomision" if subcomision else "biblioteca")
+    if organiza != "subcomision":
+        subcomision = ""
     return {
         "titulo": titulo,
         "tipo": _clave_de(datos.get("tipo"), TIPOS, "tipo", obligatorio=True),
@@ -385,8 +414,9 @@ def limpiar_actividad(datos: dict) -> dict:
         "modalidad": _clave_de(datos.get("modalidad"), MODALIDADES, "modalidad") or "presencial",
         "tematicas": _claves(datos.get("tematicas"), TEMATICAS, "temática")[:3],
         "a_cargo": _txt(datos.get("a_cargo"), 300),
-        "organiza": _clave_de(datos.get("organiza"), ORGANIZA, "organiza") or "biblioteca",
+        "organiza": organiza,
         "organiza_detalle": _txt(datos.get("organiza_detalle"), 160),
+        "subcomision": subcomision,
         "personas_total": total,
         "personas_aprox": bool(datos.get("personas_aprox")),
         "franjas": franjas,
@@ -424,6 +454,7 @@ def limpiar_taller(datos: dict) -> dict:
         "titulo": titulo,
         "mes": _mes(datos.get("mes")),
         "tallerista": _txt(datos.get("tallerista"), 200),
+        "subcomision": subcomision_de(datos.get("subcomision")),
         "espacio_id": espacio_id,
         "espacio_otro": _txt(datos.get("espacio_otro"), 120),
         "tematicas": _claves(datos.get("tematicas"), TEMATICAS, "temática")[:3],
@@ -574,12 +605,22 @@ def cuando_de(reg: dict) -> str:
     return d.get("fecha") or (d.get("mes", "") + "-28")
 
 
-def validados_entre(desde: date, hasta: date) -> list[dict]:
-    """Registros validados cuya actividad (o mes de taller) cae entre dos fechas."""
+def de_subcomision(subcomision: str, anio: int | None = None) -> list[dict]:
+    """Lo que registró una subcomisión (sin lo descartado), del más nuevo al más viejo."""
+    return [r for r in listar(anio=anio) if es_de(r, subcomision) and r["estado"] != DESCARTADO]
+
+
+def validados_entre(desde: date, hasta: date, subcomision: str | None = None) -> list[dict]:
+    """Registros validados cuya actividad (o mes de taller) cae entre dos fechas.
+
+    Con `subcomision`, solo los de esa subcomisión.
+    """
     out = []
     for anio in range(desde.year, hasta.year + 1):
         for r in _leer(anio):
             if r["estado"] != VALIDADO:
+                continue
+            if subcomision and not es_de(r, subcomision):
                 continue
             ini, fin = rango_de(r)
             if ini <= hasta and fin >= desde:
@@ -644,6 +685,15 @@ def para_ver(reg: dict) -> dict:
     }
 
 
+def para_subcomision(reg: dict) -> dict:
+    """Lo que ve una subcomisión de un registro suyo: lo cargado, sin la cocina de la
+    bandeja (duplicados, links, quién validó, qué había antes de cada corrección)."""
+    v = para_ver(reg)
+    return {k: v[k] for k in ("id", "clase", "estado", "estado_etiqueta", "datos", "cuando",
+                              "espacio_nombre", "tipo_etiqueta", "tematicas_etiquetas")} | {
+        "corregido": any(h.get("cambios") for h in reg.get("historial", []))}
+
+
 # ── Exportación ─────────────────────────────────────────────────────────────
 _COLUMNAS = [
     ("id", lambda r, d: r["id"]),
@@ -660,6 +710,7 @@ _COLUMNAS = [
     ("a_cargo", lambda r, d: d.get("a_cargo") or d.get("tallerista", "")),
     ("organiza", lambda r, d: ORGANIZA.get(d.get("organiza"), "")),
     ("organiza_detalle", lambda r, d: d.get("organiza_detalle", "")),
+    ("subcomision", lambda r, d: d.get("subcomision", "")),
     ("encuentros", lambda r, d: d.get("encuentros", "")),
     ("suspendidos", lambda r, d: d.get("suspendidos", "")),
     ("personas", lambda r, d: d.get("personas_total", d.get("participantes", ""))),

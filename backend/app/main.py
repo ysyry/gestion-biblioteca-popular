@@ -84,12 +84,12 @@ async def favicon():
     return FileResponse(_STATIC / "logo.png", media_type="image/png")
 
 
-# ── Programador de envíos automáticos (chequeo diario) ──────────────────────
+# ── Programador: envíos automáticos (diario) y reservas a Google (cada 15 min) ─
 # Tolerante: si falta APScheduler o falla, la app igual levanta (sin programador).
 try:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-    from . import auto_mail
+    from . import auto_mail, calendario_google
 
     try:
         from zoneinfo import ZoneInfo
@@ -104,6 +104,9 @@ try:
     async def _start_scheduler():
         _scheduler.add_job(auto_mail.tick, "cron", hour=_hour, minute=0,
                            id="auto_mail_tick", replace_existing=True)
+        # Las reservas que Google no aceptó (caído, sin permiso) se reintentan solas.
+        _scheduler.add_job(calendario_google.reintentar_pendientes, "interval", minutes=15,
+                           id="google_reservas", replace_existing=True)
         _scheduler.start()
         logging.getLogger("main").info(
             "Programador activo (chequeo diario %02d:00, tz=%s).", _hour, _tz or "servidor")

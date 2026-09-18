@@ -17,3 +17,16 @@ def store(monkeypatch):
     monkeypatch.setattr(storage, "set", lambda k, v: mem.__setitem__(k, v))
     monkeypatch.setattr(storage, "delete", lambda k: mem.pop(k, None))
     return mem
+
+
+@pytest.fixture(autouse=True)
+def sin_google_calendar(monkeypatch):
+    """Ningún test escribe en el Google Calendar real de la biblioteca.
+
+    Con el .env de desarrollo la app encuentra el calendario y la credencial, así que
+    aprobar una solicitud en un test publicaría de verdad. Los tests que prueban la
+    publicación lo vuelven a encender con un Google de mentira.
+    """
+    from app import calendario_google
+
+    monkeypatch.setattr(calendario_google, "configurado", lambda: False)

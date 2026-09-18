@@ -9,19 +9,16 @@ Para el año en curso, los meses futuros no cuentan como deuda.
 Config (.env / variables de entorno):
   PAGOS_SHEET_ID            id de la planilla (en la URL)
   PAGOS_SHEET_TAB           nombre de la pestaña (por defecto 'SOCIOS 2026')
-  GOOGLE_SERVICE_ACCOUNT_JSON   credencial inline (JSON en una variable) — para Railway
-  GOOGLE_SERVICE_ACCOUNT_FILE   o ruta al .json — para desarrollo local
+  La credencial de Google es la de `cuenta_google.py` (compartida con el calendario).
 """
 from __future__ import annotations
 
 import datetime as dt
-import json
 import logging
 import os
 import time
-from pathlib import Path
 
-from . import pagos
+from . import cuenta_google, pagos
 
 logger = logging.getLogger("cuotas")
 
@@ -37,20 +34,8 @@ _CACHE: dict = {"rows": None, "ts": 0.0}
 _TTL = 300  # segundos
 
 
-def _creds_source():
-    inline = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-    if inline:
-        return ("inline", inline)
-    path = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
-    if not path:
-        default = Path(__file__).resolve().parent.parent / "credentials" / "google-service-account.json"
-        path = str(default) if default.exists() else ""
-    return ("file", path) if path else (None, None)
-
-
 def configured() -> bool:
-    kind, val = _creds_source()
-    return bool(kind and val)
+    return cuenta_google.configurada()
 
 
 def _read_rows() -> list[list[str]]:
@@ -60,19 +45,8 @@ def _read_rows() -> list[list[str]]:
         return _CACHE["rows"]
 
     import gspread
-    from google.oauth2.service_account import Credentials
 
-    kind, val = _creds_source()
-    if kind == "inline":
-        # strict=False tolera saltos de línea reales dentro de private_key
-        # (pasa cuando se pega la credencial sin minificar en las variables).
-        creds = Credentials.from_service_account_info(json.loads(val, strict=False), scopes=_SCOPES)
-    elif kind == "file":
-        creds = Credentials.from_service_account_file(val, scopes=_SCOPES)
-    else:
-        raise RuntimeError("Credencial de Google no configurada (ver cuotas.py).")
-
-    gc = gspread.authorize(creds)
+    gc = gspread.authorize(cuenta_google.credenciales(_SCOPES))
     rows = gc.open_by_key(SHEET_ID).worksheet(TAB).get_all_values()
     _CACHE["rows"], _CACHE["ts"] = rows, now
     return rows
