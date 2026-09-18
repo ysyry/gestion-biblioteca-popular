@@ -41,7 +41,8 @@ def test_estado_cuotas_cuenta_deuda_solo_meses_vencidos(monkeypatch):
     assert s["debe"] == 2                  # Mar y Abr (vencidos, sin pagar)
     assert "Mar" in s["impagos"] and "May" not in s["impagos"]
     assert s["estado"] == "debe"
-    assert s["ultimo_pago"] == {"mes": "Feb", "anio": 2026, "label": "Feb 2026", "ord": 202602}
+    assert s["ultimo_pago"] == {"mes": "Feb", "anio": 2026, "label": "Feb 2026",
+                                "texto": "febrero 2026", "ord": 202602}
 
 
 def test_ultimo_pago_mira_todos_los_anios():
@@ -49,6 +50,7 @@ def test_ultimo_pago_mira_todos_los_anios():
     fila = [""] * 53
     fila[1] = "200"
     fila[23 + 9] = "P"    # 2025 bloque col 23; mes índice 9 = Oct
-    assert cuotas._ultimo_pago(fila) == {"mes": "Oct", "anio": 2025, "label": "Oct 2025", "ord": 202510}
+    assert cuotas._ultimo_pago(fila) == {"mes": "Oct", "anio": 2025, "label": "Oct 2025",
+                                         "texto": "octubre 2025", "ord": 202510}
     # Sin ninguna P → None
     assert cuotas._ultimo_pago([""] * 53) is None

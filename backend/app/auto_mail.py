@@ -19,6 +19,7 @@ import logging
 from datetime import date
 
 from . import cuotas
+from . import etiquetas
 from . import historial
 from . import mail
 from . import storage
@@ -312,7 +313,7 @@ async def build_interno(rep: dict) -> dict:
     lista_venc = "\n".join(f"• N° {car(r)} — {nom(r)} — {_titulo(r)} (venció {_d(r.get('date_due'))}, {_dias(r)} días)" for r in venc) or "ninguno"
     lista_act = "\n".join(f"• N° {car(r)} — {nom(r)} — {_titulo(r)} (vence {_d(r.get('date_due'))})" for r in porv) or "ninguno"
     vars = {
-        "fecha": date.today().isoformat(),
+        "fecha": _d(date.today().isoformat()),
         "dias_antes": str(dias_antes),
         "total_vencidos": str(len(venc)),
         "total_activos": str(len(porv)),
@@ -332,7 +333,11 @@ async def build_interno(rep: dict) -> dict:
     }
     stats = {"vencidos": len(venc), "por_vencer": len(porv)}
 
-    if rep.get("incluir_cuotas"):
+    # Igual que en el de socios: si el mensaje usa {{lista_cuotas}} o {{total_deudores_cuota}},
+    # se calcula aunque no esté tildada la casilla (antes salía "ninguno" y 0).
+    usa_cuota = bool(etiquetas.usadas(rep.get("subject"), rep.get("body"), rep.get("footer"))
+                     & etiquetas.CUOTA_INTERNO)
+    if rep.get("incluir_cuotas") or usa_cuota:
         umbral = int(rep.get("umbral_cuota", 1))
         cm = await _cuota_map()
         members = await _members_map()
@@ -343,11 +348,13 @@ async def build_interno(rep: dict) -> dict:
         deud.sort(key=lambda s: -s.get("debe", 0))
         vars["total_deudores_cuota"] = str(len(deud))
         vars["lista_cuotas"] = "\n".join(
-            f"• {s['apellido']}, {s['nombre']} (mat. {s['matricula']}) — debe {s['debe']}: {', '.join(s.get('impagos', []))}"
+            f"• {s['apellido']}, {s['nombre']} (mat. {s['matricula']}) — debe {s['debe']}: "
+            f"{', '.join(s.get('impagos', []))} · último pago: {etiquetas.cuota_socio(s)['ultimo_mes_pago']}"
             for s in deud) or "ninguno"
         html_blocks["lista_cuotas"] = mail.html_table(
-            ["Socio", "Matrícula", "Debe", "Meses"],
-            [[f"{s['apellido']}, {s['nombre']}", s["matricula"], f"{s['debe']} mes(es)", ", ".join(s.get("impagos", []))] for s in deud])
+            ["Socio", "Matrícula", "Debe", "Meses", "Último pago"],
+            [[f"{s['apellido']}, {s['nombre']}", s["matricula"], f"{s['debe']} mes(es)",
+              ", ".join(s.get("impagos", [])), etiquetas.cuota_socio(s)["ultimo_mes_pago"]] for s in deud])
         stats["deudores_cuota"] = len(deud)
 
     footer = ("\n\n" + rep["footer"]) if rep.get("footer") else ""
@@ -394,7 +401,11 @@ async def _socios_recipients(rep: dict) -> dict:
             continue
         by.setdefault(_norm(c), {"info": r, "loans": []})["loans"].append(r)
 
-    cm = await _cuota_map() if inc_c else {}
+    # La planilla se lee si la cuota decide a quién se le manda, o si el mensaje usa una
+    # etiqueta de cuota: sin esto, {{meses_debe}} salía 0 en los reportes sin la casilla.
+    usa_cuota = bool(etiquetas.usadas(rep.get("subject"), rep.get("body"), rep.get("footer"))
+                     & etiquetas.CUOTA_SOCIO)
+    cm = await _cuota_map() if (inc_c or usa_cuota) else {}
     members = await _members_map()                 # siempre: para filtrar bajas
     bajas = {c for c in members if _cat(members, c) in BAJA_CATS}
 
@@ -432,7 +443,7 @@ async def _socios_recipients(rep: dict) -> dict:
         recipients.append({
             "email": email,
             "vars": {
-                "nombre": nombre, "apellido": apellido, "carnet": carnet,
+                "nombre": nombre, "apellido": apellido, "carnet": carnet, "email": email or "",
                 "vencidos": lista_venc,
                 "activos": lista_act,
                 "prestamos": lista_todos,
@@ -441,8 +452,7 @@ async def _socios_recipients(rep: dict) -> dict:
                 "cantidad_prestamos": str(len(todos)),
                 # Alias del nombre viejo: las plantillas que aún digan {{por_vencer}} siguen andando.
                 "por_vencer": lista_act, "cantidad_por_vencer": str(len(porv)),
-                "meses_debe": str(s.get("debe", 0)),
-                "meses_impagos": ", ".join(s.get("impagos", [])) or "—",
+                **etiquetas.cuota_socio(s),
             },
             "html": {
                 "vencidos": mail.libros_table([{"titulo": _titulo(l)} for l in venc], con_fecha=False),

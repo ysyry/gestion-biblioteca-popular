@@ -137,7 +137,10 @@
   .help-btn:hover { background:var(--magenta); color:#fff; }
   .help-list { display:flex; flex-direction:column; gap:.5rem; max-height:52vh; overflow:auto; }
   .help-row { display:flex; gap:.6rem; align-items:flex-start; font-size:.86rem; line-height:1.45; }
-  .help-row code { flex:0 0 auto; min-width:170px; }
+  .help-row code { flex:0 0 13rem; }   /* ancho fijo: entra {{total_deudores_cuota}} y las descripciones quedan alineadas */
+  @media (max-width:560px){ .help-row { flex-direction:column; gap:.15rem; } .help-row code { flex:none; } }
+  .help-grupo { font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+                color:var(--muted); margin-top:.4rem; }
   .hist-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; margin-bottom:.9rem; }
   .hist-toolbar .subtabs { margin:0; }
   .hist-msg { margin:.1rem 0 .55rem; padding:.55rem .7rem; background:#fafbfc; border:1px solid var(--line);
@@ -912,25 +915,8 @@
             <input id="mailSubject" placeholder="Ej: Novedades de la Biblioteca" />
             <label>Cuerpo</label>
             <textarea id="mailBody" rows="8" placeholder="Hola {{nombre}}, te escribimos desde la Biblioteca…"></textarea>
-            <p class="meta vars">Datos del socio (clic para insertar):
-              <code data-v="nombre">{{nombre}}</code>
-              <code data-v="apellido">{{apellido}}</code>
-              <code data-v="carnet">{{carnet}}</code>
-              <code data-v="email">{{email}}</code>
-            </p>
-            <p class="meta vars">Libros del socio:
-              <button class="help-btn" data-help="libros" title="¿Qué significa cada etiqueta?">?</button>
-              <code data-v="vencidos">{{vencidos}}</code>
-              <code data-v="activos">{{activos}}</code>
-              <code data-v="prestamos">{{prestamos}}</code>
-              <code data-v="cantidad_vencidos">{{cantidad_vencidos}}</code>
-              <code data-v="cantidad_activos">{{cantidad_activos}}</code>
-              <code data-v="cantidad_prestamos">{{cantidad_prestamos}}</code>
-            </p>
-            <p class="meta vars">Cuota societaria:
-              <code data-v="meses_debe">{{meses_debe}}</code>
-              <code data-v="meses_impagos">{{meses_impagos}}</code>
-            </p>
+            <!-- Las etiquetas salen del catálogo del servidor (app/etiquetas.py): clic para insertar. -->
+            <div id="mailVars"></div>
             <div class="meta">Vista previa (primer destinatario):</div>
             <div id="mailPreview" class="preview">—</div>
 
@@ -1032,36 +1018,38 @@ function busyLine(text, hint){
          (hint?`<small>${esc(hint)}</small>`:"")+`</div>`;
 }
 // Confirmación con UI propia (reemplaza al confirm() del navegador). Devuelve Promise<bool>.
-// ── Ayuda: qué significa cada etiqueta ─────────────────────────────────────
-// Un solo lugar donde se explica el vocabulario, para que la UI y los mails no
-// se desincronicen. Se abre con el "?" que está al lado de las etiquetas.
-const HELP_ETIQUETAS = {
-  libros: { titulo:"Las etiquetas de libros", intro:"Se reemplazan por los datos de cada socio al enviar el mail.", filas:[
-    ["{{vencidos}}", "Los libros que el socio <b>ya tendría que haber devuelto</b>. Va la lista de títulos, <b>sin la fecha</b>."],
-    ["{{activos}}", "Los que <b>todavía tiene en préstamo</b> y aún no vencieron. Va el título y <b>cuándo vence</b> cada uno."],
-    ["{{prestamos}}", "<b>Todos los préstamos</b> del socio: los vencidos y los activos juntos, en una sola lista."],
-    ["{{cantidad_vencidos}}", "Cuántos vencidos tiene (un número)."],
-    ["{{cantidad_activos}}", "Cuántos activos tiene (un número)."],
-    ["{{cantidad_prestamos}}", "Cuántos libros tiene en total (un número)."],
-  ]},
-  interno: { titulo:"Las etiquetas del resumen interno", intro:"Este reporte lo reciben las bibliotecarias, así que las listas incluyen el nombre del socio.", filas:[
-    ["{{lista_vencidos}}", "Todos los préstamos vencidos de la biblioteca, con socio, fecha y días de atraso."],
-    ["{{lista_activos}}", "Los préstamos activos que vencen dentro de los días configurados arriba."],
-    ["{{lista_cuotas}}", "Los socios que deben cuota (según el umbral configurado)."],
-    ["{{total_vencidos}}", "Cuántos préstamos vencidos hay en total."],
-    ["{{total_activos}}", "Cuántos préstamos activos hay en la ventana configurada."],
-    ["{{total_deudores_cuota}}", "Cuántos socios deben cuota."],
-    ["{{fecha}}", "La fecha del día en que se envía el reporte."],
-  ]},
+// ── Etiquetas de los mails ─────────────────────────────────────────────
+// Salen del servidor (app/etiquetas.py): de ahí los chips para insertar y la ayuda.
+// Un solo catálogo para Mails y Automáticos, así la pantalla y los mails no se
+// desincronizan. `socio`: un mail por socio · `interno`: el resumen de las bibliotecarias.
+let ETIQ=null;
+async function cargarEtiquetas(){
+  if(!ETIQ){ try { ETIQ=await api("/api/mail/etiquetas"); } catch(_){ return {socio:[], interno:[]}; } }
+  return ETIQ;
+}
+const AYUDA = {
+  socio:   { titulo:"Las etiquetas para cada socio",
+             intro:"Se reemplazan por los datos de cada socio al enviar el mail. Sirven en Mails y en los Automáticos a socios." },
+  interno: { titulo:"Las etiquetas del resumen interno",
+             intro:"Este reporte lo reciben las bibliotecarias, así que las listas incluyen el nombre del socio." },
 };
-function mostrarAyuda(clave){
-  const h=HELP_ETIQUETAS[clave]; if(!h) return;
+// Chips de un juego de etiquetas, agrupados. `insertar`: se pueden tocar para insertarlas.
+function chipsEtiquetas(juego, {insertar=false}={}){
+  const grupos=(ETIQ&&ETIQ[juego])||[];
+  return grupos.map((g,i)=>`<p class="meta${insertar?" vars":""}" style="margin:.35rem 0 0">${esc(g.grupo)}:
+    ${i===0?`<button class="help-btn" data-help="${juego}" title="¿Qué significa cada etiqueta?">?</button>`:""}
+    ${g.items.map(x=>`<code${insertar?` data-v="${esc(x.etiqueta)}"`:""}>{{${esc(x.etiqueta)}}}</code>`).join(" ")}</p>`).join("");
+}
+async function mostrarAyuda(clave){
+  const h=AYUDA[clave]; if(!h) return;
+  const grupos=(await cargarEtiquetas())[clave]||[];
   const bg=document.createElement("div"); bg.className="modal-bg";
+  // Las descripciones vienen del catálogo del servidor y traen <b> a propósito.
   bg.innerHTML=`<div class="modal" style="max-width:620px">
     <h3>${esc(h.titulo)}</h3>
     <p class="meta" style="margin:.2rem 0 .8rem;line-height:1.5">${esc(h.intro)}</p>
-    <div class="help-list">${h.filas.map(([k,d])=>
-      `<div class="help-row"><code>${esc(k)}</code><span>${d}</span></div>`).join("")}</div>
+    <div class="help-list">${grupos.map(g=>`<div class="help-grupo">${esc(g.grupo)}</div>`+
+      g.items.map(x=>`<div class="help-row"><code>{{${esc(x.etiqueta)}}}</code><span>${x.descripcion}</span></div>`).join("")).join("")}</div>
     <p class="meta" style="margin:.8rem 0 0;line-height:1.5">Escribí la etiqueta tal cual en el asunto o el cuerpo. En la pestaña <b>Mails</b> además podés tocarla para insertarla donde tenés el cursor.</p>
     <div class="row-btns"><button class="primary" style="width:auto;margin:0" id="ayudaOk">Entendido</button></div></div>`;
   document.body.appendChild(bg);
@@ -1201,6 +1189,7 @@ function selectTab(tab){
   else if (tab==="mias") { loadMias(); }
   else if (tab==="actualidad") { loadActualidad(); }
   else if (tab==="mails") { renderRecipients(); updatePreview();
+    cargarEtiquetas().then(()=>{ $("mailVars").innerHTML=chipsEtiquetas("socio",{insertar:true}); });
     ensureCuotaMap().then(()=>{ updatePreview(); });
     refrescarAvisos().then(()=>{ if(currentTab==="mails") renderRecipients(); }); }
   else if (tab==="auto") { loadAuto(); refrescarAvisos(); }
@@ -2412,7 +2401,8 @@ async function ensureCuotaMap(){
   if(cuotaMap) return;
   try {
     const d=await api("/api/cuotas"); cuotaMap={};
-    (d.socios||[]).forEach(s=>{ cuotaMap[normId(s.matricula)]={debe:s.debe||0, impagos:s.impagos||[]}; });
+    (d.socios||[]).forEach(s=>{ cuotaMap[normId(s.matricula)]={debe:s.debe||0, impagos:s.impagos||[],
+      ultimo:s.ultimo_pago ? s.ultimo_pago.texto : "sin pagos registrados"}; });
   } catch(_){ cuotaMap={}; }
 }
 function recipVars(r){
@@ -2420,11 +2410,12 @@ function recipVars(r){
     {nombre:r.nombre||"", apellido:r.apellido||"", carnet:r.carnet||"", email:r.email||"",
      vencidos:"ninguno", por_vencer:"ninguno", prestamos:"ninguno",
      cantidad_vencidos:"0", cantidad_por_vencer:"0", cantidad_prestamos:"0",
-     meses_debe:"0", meses_impagos:"—"},
+     meses_debe:"0", meses_impagos:"—", ultimo_mes_pago:"—"},
     r.ctx||{});
   // Completa la cuota desde la planilla por carnet (si está cargada).
   if(cuotaMap){ const c=cuotaMap[normId(r.carnet)];
-    if(c){ v.meses_debe=String(c.debe); v.meses_impagos=c.impagos.length?c.impagos.join(", "):"—"; } }
+    if(c){ v.meses_debe=String(c.debe); v.meses_impagos=c.impagos.length?c.impagos.join(", "):"—";
+           v.ultimo_mes_pago=c.ultimo; } }
   return v;
 }
 // Contexto de cuota (para mails de cuota): meses adeudados y cuáles.
@@ -2621,7 +2612,7 @@ document.querySelectorAll('input[name="mailMode"]').forEach(r=>r.addEventListene
   $("mailSendBtn").textContent = mode==="test" ? "Enviar prueba" : "Enviar a socios";
   $("mailTestTo").disabled = mode!=="test";
 }));
-document.querySelectorAll(".vars code").forEach(c=>c.addEventListener("click",()=>insertVar(c.dataset.v)));
+$("mailVars").addEventListener("click", e=>{ const c=e.target.closest("code[data-v]"); if(c) insertVar(c.dataset.v); });
 
 // ── Estadísticas / Inicio ─────────────────────────────────────────────────
 function statKpi(n,l,cls){ return `<div class="kpi ${cls||''}"><div class="n">${n}</div><div class="l">${l}</div></div>`; }
@@ -3167,7 +3158,7 @@ function mailMock(de, para, subject, body){
 let autoCfg=null, autoSel=null, autoExcl=[];
 async function loadAuto(){
   try {
-    autoCfg=await api("/api/auto/config");
+    [autoCfg] = await Promise.all([api("/api/auto/config"), cargarEtiquetas()]);
     if(!autoCfg.reports.length){ $("autoTabs").innerHTML=""; $("autoForm").innerHTML='<p class="empty">No hay reportes. Creá uno.</p>'; }
     if(!autoSel || !autoCfg.reports.some(r=>r.id===autoSel)) autoSel=autoCfg.reports[0]?.id||null;
     renderAuto();
@@ -3188,8 +3179,6 @@ function renderAuto(){
 function renderAutoForm(r, last){
   const esS = r.tipo==='socios';
   autoExcl = (r.excluidos||[]).slice();
-  const varsInt='<code>{{fecha}}</code> <code>{{lista_vencidos}}</code> <code>{{lista_activos}}</code> <code>{{lista_cuotas}}</code> <code>{{total_vencidos}}</code> <code>{{total_activos}}</code> <code>{{total_deudores_cuota}}</code>';
-  const varsSoc='<code>{{nombre}}</code> <code>{{apellido}}</code> <code>{{vencidos}}</code> <code>{{activos}}</code> <code>{{prestamos}}</code> <code>{{cantidad_vencidos}}</code> <code>{{cantidad_activos}}</code> <code>{{cantidad_prestamos}}</code> <code>{{meses_debe}}</code> <code>{{meses_impagos}}</code>';
   $("autoForm").innerHTML=`<div class="card auto-card">
     <div class="auto-head">
       <div>
@@ -3219,7 +3208,7 @@ function renderAutoForm(r, last){
     <input id="a_subject" value="${esc(r.subject||'')}" />
     <label>Cuerpo</label>
     <textarea id="a_body" rows="7">${esc(r.body||'')}</textarea>
-    <p class="varhint">Variables: <button class="help-btn" data-help="${esS?'libros':'interno'}" title="¿Qué significa cada etiqueta?">?</button> ${esS?varsSoc:varsInt}</p>
+    <div class="varhint">${chipsEtiquetas(esS?'socio':'interno')}</div>
     <label>Pie del mensaje</label>
     <textarea id="a_footer" rows="2">${esc(r.footer||'')}</textarea>
     <div class="auto-actions" style="margin-top:.7rem">

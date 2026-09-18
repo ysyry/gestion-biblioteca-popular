@@ -28,6 +28,8 @@ TAB = os.getenv("PAGOS_SHEET_TAB", "SOCIOS 2026")
 # Columna (0-based) donde arranca el bloque de 12 meses de cada año.
 YEAR_BLOCKS = {2024: 11, 2025: 23, 2026: 35}
 MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+MESES_LARGO = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+               "septiembre", "octubre", "noviembre", "diciembre"]
 
 _SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 _CACHE: dict = {"rows": None, "ts": 0.0}
@@ -72,8 +74,10 @@ def _estado_mes(v: str) -> str:
 def _ultimo_pago(r: list[str], ov: dict | None = None) -> dict | None:
     """Mes más reciente con pago del socio, mirando TODOS los años (planilla + app).
 
-    Devuelve {'mes','anio','label','ord'} o None si nunca pagó. `ord` = anio*100+mes,
-    sirve para ordenar. Cubre el caso de que el último pago sea de un año anterior.
+    Devuelve {'mes','anio','label','texto','ord'} o None si nunca pagó. `label` es corto
+    para las tablas ("Ago 2026"); `texto`, para los mails ("agosto 2026"). `ord` =
+    anio*100+mes, sirve para ordenar. Cubre el caso de que el último pago sea de un año
+    anterior.
     `ov` = meses pagos cargados en la app ({'AAAA-MM': ...}).
     """
     ov = ov or {}
@@ -89,7 +93,8 @@ def _ultimo_pago(r: list[str], ov: dict | None = None) -> dict | None:
     if mejor is None:
         return None
     anio, m = mejor
-    return {"mes": MESES[m], "anio": anio, "label": f"{MESES[m]} {anio}", "ord": anio * 100 + (m + 1)}
+    return {"mes": MESES[m], "anio": anio, "label": f"{MESES[m]} {anio}",
+            "texto": f"{MESES_LARGO[m]} {anio}", "ord": anio * 100 + (m + 1)}
 
 
 def estado_cuotas(anio: int) -> dict:

@@ -31,6 +31,7 @@ from .. import cuotas
 from .. import pagos
 from .. import cache
 from .. import espacios
+from .. import etiquetas
 from .. import notas
 from .. import panorama
 from .. import permisos
@@ -937,6 +938,12 @@ async def mail_config(_: Sesion = Depends(requiere(permisos.MAILS))):
     }
 
 
+@router.get("/mail/etiquetas", tags=["mail"])
+async def mail_etiquetas(_: Sesion = Depends(requiere(permisos.MAILS))):
+    """Las etiquetas que se pueden usar en los mails, con qué pone cada una."""
+    return etiquetas.catalogo()
+
+
 @router.post("/mail/send", tags=["mail"])
 async def mail_send(body: MailSendRequest, ses: Sesion = Depends(requiere(permisos.MAILS))):
     """Envía (o simula) una campaña de mail a los destinatarios seleccionados.
@@ -962,21 +969,19 @@ async def mail_send(body: MailSendRequest, ses: Sesion = Depends(requiere(permis
             if blocks:
                 r["html"] = blocks
 
-    # Enriquece con la deuda de cuota por carnet, así {{meses_debe}}/{{meses_impagos}}
-    # funcionan aunque el socio se haya agregado por búsqueda (no solo desde el cruce).
-    usa_cuota = "{{meses_debe}}" in (body.body or "") or "{{meses_impagos}}" in (body.body or "")
-    if cuotas.configured() and usa_cuota:
+    # Las etiquetas de cuota ({{meses_debe}}, {{meses_impagos}}, {{ultimo_mes_pago}}) salen
+    # de la planilla por carnet, así funcionan aunque el socio se haya agregado por búsqueda.
+    # Se miran el asunto, el cuerpo y los textos personalizados de cada socio.
+    textos = [body.subject, body.body, *(r.get("subject") for r in recipients),
+              *(r.get("body") for r in recipients)]
+    if cuotas.configured() and etiquetas.usadas(*textos) & etiquetas.CUOTA_SOCIO:
         try:
-            import asyncio
             data = await asyncio.to_thread(cuotas.estado_cuotas, max(cuotas.anios_disponibles()))
             cmap = {_norm_id(s["matricula"]): s for s in data["socios"] if s.get("matricula")}
             for r in recipients:
                 v = r.get("vars") or {}
-                s = cmap.get(_norm_id(v.get("carnet")))
-                if s:
-                    v["meses_debe"] = str(s.get("debe", 0))
-                    v["meses_impagos"] = ", ".join(s.get("impagos", [])) or "—"
-                    r["vars"] = v
+                v.update(etiquetas.cuota_socio(cmap.get(_norm_id(v.get("carnet")))))
+                r["vars"] = v
         except Exception as exc:  # noqa: BLE001
             logger.warning("No se pudo enriquecer cuotas en mail: %s", exc)
 
