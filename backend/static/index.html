@@ -498,8 +498,12 @@
   .viz-kpi .n { font-size:2rem; font-weight:600; color:var(--navy); line-height:1.15; margin:.15rem 0; }
   .viz-kpi .d { font-size:.76rem; color:var(--tinta-3); }
   .viz-kpi .d.sube { color:var(--sube); } .viz-kpi .d.baja { color:var(--baja); }
-  .viz-cols { display:grid; grid-template-columns:1fr 1fr; gap:1.1rem; margin-bottom:1.1rem; align-items:start; }
+  .viz-cols { display:grid; grid-template-columns:1fr 1fr; gap:1.1rem; margin-bottom:1.1rem; align-items:stretch; }
   .viz-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:1.1rem 1.2rem; min-width:0; }
+  /* Tarjetas apiladas en una columna: cada columna crece por su cuenta y una tarjeta
+     corta no deja un hueco al lado de una larga. */
+  .viz-pila { display:flex; flex-direction:column; gap:1.1rem; min-width:0; }
+  .viz-pila > .viz-card:last-child { flex:1; }   /* las dos columnas terminan a la misma altura */
   .viz-card h3 { margin:0; color:var(--navy); font-size:.98rem; }
   .viz-card .sub { color:var(--tinta-3); font-size:.78rem; margin:.15rem 0 .6rem; }
   .viz-card-cab { display:flex; justify-content:space-between; align-items:flex-start; gap:.6rem; }
@@ -1458,16 +1462,17 @@ function renderActualidad(){
       `<div class="viz-kpi"><div class="l">${esc(l)}</div><div class="n">${miles(n[k].valor)}</div>${vizDelta(n[k])}</div>`).join("")}</div>
 
     <div class="viz-cols">
-      ${vizCard("Lo que se destaca", esc(d.periodo.etiqueta), destacados)}
-      ${queViene}
-    </div>
-
-    <div class="viz-cols">
-      ${vizCard("Lo último que pasó", "Actividades únicas, de la más reciente", recientes)}
-      ${vizCard(conMeses?"Personas en actividades, mes a mes":"Personas en actividades",
-        "Sin contar talleres (esos van abajo)", '<div id="vizMeses"></div>',
-        tabla([["Mes","etiqueta"],["Actividades","actividades",vizNum],["Personas","personas",vizNum],
-               ["Encuentros de talleres","encuentros",vizNum],["Participantes de talleres","participantes",vizNum]], d.por_mes))}
+      <div class="viz-pila">
+        ${vizCard("Lo que se destaca", esc(d.periodo.etiqueta), destacados)}
+        ${vizCard("Lo último que pasó", "Actividades únicas, de la más reciente", recientes)}
+      </div>
+      <div class="viz-pila">
+        ${queViene}
+        ${vizCard(conMeses?"Personas en actividades, mes a mes":"Personas en actividades",
+          "Sin contar talleres (esos van abajo)", '<div id="vizMeses"></div>',
+          tabla([["Mes","etiqueta"],["Actividades","actividades",vizNum],["Personas","personas",vizNum],
+                 ["Encuentros de talleres","encuentros",vizNum],["Participantes de talleres","participantes",vizNum]], d.por_mes))}
+      </div>
     </div>
 
     <div class="viz-cols">
