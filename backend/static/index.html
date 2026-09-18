@@ -38,6 +38,10 @@
   .sidebar .brand .t span { font-size:.72rem; opacity:.65; font-weight:400; }
 
   .tabs { display:flex; flex-direction:column; gap:.15rem; padding:.4rem .7rem; margin-top:.4rem; }
+  /* Con los grupos abiertos el menú puede no entrar: se desplaza por dentro y el pie
+     (usuario, cerrar sesión) queda siempre abajo, dentro de la barra. */
+  .sidebar .tabs { flex:1 1 auto; min-height:0; overflow-y:auto;
+             scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.25) transparent; }
   .tabs button { text-align:left; background:transparent; border:none; color:rgba(255,255,255,.78);
              padding:.7rem .9rem; border-radius:9px; cursor:pointer; font-size:.92rem;
              font-family:inherit; font-weight:500; border-left:3px solid transparent; transition:.12s; }
