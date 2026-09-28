@@ -25,8 +25,18 @@ logger = logging.getLogger("cuotas")
 SHEET_ID = os.getenv("PAGOS_SHEET_ID", "1SDw0Xes3kPBUMmUaj9mOY5aPnu4577a_SUupKAk8F3o")
 TAB = os.getenv("PAGOS_SHEET_TAB", "SOCIOS 2026")
 
-# Columna (0-based) donde arranca el bloque de 12 meses de cada año.
-YEAR_BLOCKS = {2024: 11, 2025: 23, 2026: 35}
+# Los años van en bloques de 12 meses, uno al lado del otro: 2024 arranca en la columna
+# 11 (0-based) y cada año siguiente 12 columnas más a la derecha. Se ofrecen todos desde
+# PRIMER_ANIO hasta el año en curso (como mínimo 2026): un año nuevo sigue a la derecha
+# en la misma pestaña. Si la planilla todavía no tiene sus columnas, sus meses cuentan
+# como impagos salvo los pagos que se carguen desde la app.
+PRIMER_ANIO = 2024
+_COL_PRIMER_ANIO = 11
+
+
+def col_de(anio: int) -> int:
+    """Columna (0-based) donde arranca el bloque de 12 meses de `anio`."""
+    return _COL_PRIMER_ANIO + 12 * (anio - PRIMER_ANIO)
 MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 MESES_LARGO = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
                "septiembre", "octubre", "noviembre", "diciembre"]
@@ -59,7 +69,7 @@ def clear_cache() -> None:
 
 
 def anios_disponibles() -> list[int]:
-    return sorted(YEAR_BLOCKS.keys(), reverse=True)
+    return list(range(max(dt.date.today().year, 2026), PRIMER_ANIO - 1, -1))
 
 
 def _estado_mes(v: str) -> str:
@@ -82,7 +92,8 @@ def _ultimo_pago(r: list[str], ov: dict | None = None) -> dict | None:
     """
     ov = ov or {}
     mejor = None  # (anio, indice_mes 0-11)
-    for anio, col0 in YEAR_BLOCKS.items():
+    for anio in anios_disponibles():
+        col0 = col_de(anio)
         for m in range(12):
             c = col0 + m
             en_planilla = len(r) > c and _estado_mes(r[c]) == "pago"
@@ -99,9 +110,9 @@ def _ultimo_pago(r: list[str], ov: dict | None = None) -> dict | None:
 
 def estado_cuotas(anio: int) -> dict:
     """Devuelve el estado de cuotas de todos los socios para un año."""
-    if anio not in YEAR_BLOCKS:
-        anio = max(YEAR_BLOCKS)
-    col0 = YEAR_BLOCKS[anio]
+    if anio not in anios_disponibles():
+        anio = max(anios_disponibles())
+    col0 = col_de(anio)
     rows = _read_rows()
 
     hoy = dt.date.today()

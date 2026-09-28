@@ -130,3 +130,49 @@ def test_subcomision_si_pasa_a_la_agenda(como):
 
 def test_sin_token_da_401():
     assert TestClient(app).get("/api/usuarios").status_code == 401
+
+
+# ── Sesiones abiertas ───────────────────────────────────────────────────────
+def _login_real(usuario, clave):
+    """Entra de verdad (sin overrides), como lo haría la pantalla."""
+    c = TestClient(app)
+    tok = c.post("/api/auth/login", json={"username": usuario, "password": clave}).json()
+    c.headers["Authorization"] = f"Bearer {tok['access_token']}"
+    return c
+
+
+@pytest.mark.parametrize("sacar", [
+    lambda uid: usuarios.actualizar(uid, {"activo": False}),
+    lambda uid: usuarios.borrar(uid),
+], ids=["desactivado", "borrado"])
+def test_sacarle_el_acceso_corta_la_sesion_abierta(store, sacar):
+    u, _ = usuarios.crear(usuario="pedro", nombre="Pedro", rol="comision", password="clave-pedro")
+    c = _login_real("pedro", "clave-pedro")
+    assert c.get("/api/me").status_code == 200
+    sacar(u["id"])
+    assert c.get("/api/me").status_code == 401
+
+
+def test_un_cambio_de_rol_vale_en_la_sesion_abierta(store):
+    u, _ = usuarios.crear(usuario="pedro", nombre="Pedro", rol="comision", password="clave-pedro")
+    c = _login_real("pedro", "clave-pedro")
+    assert c.get("/api/usuarios").status_code == 200
+    usuarios.actualizar(u["id"], {"rol": "subcomision", "subcomision": "Prensa"})
+    assert c.get("/api/usuarios").status_code == 403
+    assert c.get("/api/me").json()["subcomision"] == "Prensa"
+
+
+# ── Nadie da más de lo que tiene ────────────────────────────────────────────
+def test_la_comision_no_crea_ni_toca_bibliotecarias(como, store):
+    otra, _ = usuarios.crear(usuario="equipo", nombre="Equipo", rol="bibliotecaria")
+    c = como("comision", usuario="tesoreria")
+    assert {r["id"] for r in c.get("/api/usuarios").json()["roles"]} == {"comision", "subcomision"}
+    assert c.post("/api/usuarios", json={"usuario": "colada", "nombre": "Colada",
+                                         "rol": "bibliotecaria"}).status_code == 403
+    assert c.post("/api/usuarios", json={"usuario": "prensa", "nombre": "Prensa",
+                                         "rol": "subcomision", "subcomision": "Prensa"}).status_code == 200
+    prensa = next(u for u in usuarios.listar() if u["usuario"] == "prensa")
+    assert c.put(f"/api/usuarios/{prensa['id']}", json={"rol": "bibliotecaria"}).status_code == 403
+    assert c.put(f"/api/usuarios/{otra['id']}", json={"nombre": "X"}).status_code == 403
+    assert c.post(f"/api/usuarios/{otra['id']}/password").status_code == 403
+    assert c.delete(f"/api/usuarios/{otra['id']}").status_code == 403

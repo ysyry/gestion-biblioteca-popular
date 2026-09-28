@@ -257,3 +257,17 @@ def test_menu_de_subcomision_no_tiene_grupos_vacios():
 
 def test_menu_de_rol_desconocido_es_vacio():
     assert permisos.menu_de("intruso") == []
+
+
+def test_el_usuario_no_puede_coincidir_con_el_email_de_otro(store):
+    usuarios.crear(usuario="prensa", nombre="Prensa", rol="comision", email="cultura@bayer.org")
+    with pytest.raises(usuarios.ErrorUsuario):
+        usuarios.crear(usuario="Cultura@Bayer.org", nombre="Cultura", rol="comision")
+    otro, _ = usuarios.crear(usuario="tesoreria", nombre="Tesorería", rol="comision")
+    with pytest.raises(usuarios.ErrorUsuario):
+        usuarios.crear(usuario="nuevo", nombre="Nuevo", rol="comision", email="tesoreria")
+    with pytest.raises(usuarios.ErrorUsuario):
+        usuarios.actualizar(otro["id"], {"email": "prensa"})
+    # Su propio email lo puede volver a guardar.
+    usuarios.actualizar(otro["id"], {"email": "teso@bayer.org"})
+    usuarios.actualizar(otro["id"], {"email": "teso@bayer.org"})

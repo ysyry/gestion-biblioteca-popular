@@ -75,6 +75,18 @@ def puede(rol: str, permiso: str) -> bool:
     return permiso in permisos_de(rol)
 
 
+# Qué roles puede dar (y editar) quien administra usuarios. La comisión no crea
+# bibliotecarias: si no, con eso entraría al pizarrón, que es solo del equipo.
+_ASIGNA = {
+    "bibliotecaria": list(ROLES),
+    "comision": ["comision", "subcomision"],
+}
+
+
+def roles_que_asigna(rol: str) -> list[str]:
+    return list(_ASIGNA.get(rol, [])) if USUARIOS_ADMIN in permisos_de(rol) else []
+
+
 # ── Secciones del menú ──────────────────────────────────────────────────────
 # El frontend arma el menú con lo que devuelve /api/me, así nadie ve una pestaña
 # que después le va a dar 403. La lista es también el orden en que se muestran.

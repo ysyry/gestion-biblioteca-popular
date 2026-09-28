@@ -81,3 +81,11 @@ async def test_panel_sigue_andando_si_falla_solo_un_grafico():
     assert d["socios"]["total"] == 1380          # los números principales, intactos
     assert d["estacionalidad"] == []             # el gráfico que falló, vacío
     assert len(d["avisos"]) == 1                 # y queda dicho que falló
+
+
+def test_la_api_no_se_guarda_en_el_navegador():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    assert c.get("/api/publico/registro/no-existe").headers["cache-control"] == "no-store"
+    assert "no-store" not in c.get("/logo.png").headers.get("cache-control", "")

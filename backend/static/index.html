@@ -988,7 +988,8 @@ async function api(path, opts = {}) {
   const headers = Object.assign({ "Content-Type":"application/json" }, opts.headers||{});
   if (token) headers["Authorization"] = "Bearer " + token;
   const res = await fetch(path, Object.assign({}, opts, { headers }));
-  if (res.status === 401) { doLogout(); throw new Error("Sesión expirada. Volvé a entrar."); }
+  // Un 401 al entrar es usuario o clave mal, no una sesión vencida: que llegue el motivo.
+  if (res.status === 401 && path !== "/api/auth/login") { doLogout(); throw new Error("Sesión expirada. Volvé a entrar."); }
   const data = await res.json().catch(()=>({}));
   if (!res.ok) throw new Error(data.detail || ("Error HTTP "+res.status));
   return data;
@@ -1250,6 +1251,8 @@ async function load(path, cols, clickable=false){
     applyListFilter();
   } catch(err){ wrap.innerHTML=""; msg($("panelMsg"),err.message,"error"); }
 }
+// Para buscar: sin mayúsculas ni tildes ("lopez" encuentra "López").
+function plano(s){ return String(s??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); }
 function cmp(a,b){
   const na=Number(a), nb=Number(b);
   const bothNum = a!=="" && a!=null && b!=="" && b!=null && !Number.isNaN(na) && !Number.isNaN(nb);
@@ -1262,8 +1265,8 @@ function sortBy(key){
 }
 function applyListFilter(){
   const wrap=$("tableWrap");
-  const q=($("listFilterInput").value||"").trim().toLowerCase();
-  let rows = q ? loadedRows.filter(r=>loadedCols.some(([_,k])=>String(r[k]??"").toLowerCase().includes(q))) : loadedRows.slice();
+  const q=plano(($("listFilterInput").value||"").trim());
+  let rows = q ? loadedRows.filter(r=>loadedCols.some(([_,k])=>plano(r[k]).includes(q))) : loadedRows.slice();
   if(sortKey) rows = rows.slice().sort((a,b)=>cmp(a[sortKey],b[sortKey])*sortDir);
   renderTable(wrap, loadedCols, rows, loadedClickable);
   $("rowCount").textContent = q ? `${rows.length} de ${loadedRows.length} resultado(s).` : `${loadedRows.length} resultado(s).`;
@@ -1730,7 +1733,8 @@ function regFormulario(r){
     <div class="ancho"><label class="chk"><input type="checkbox" data-reg="incidente_atencion"
       ${(d.incidente||{}).requiere_atencion?"checked":""} /> Requiere atención</label></div>
     ${regCampo("valoracion","Valoración (1 a 5)", d.valoracion, {tipo:"number"})}
-    ${regCampo("nombre_completa","¿Quién lo informó?", (d.quien_completa||{}).nombre || ME.nombre || ME.username)}`;
+    ${regCampo("nombre_completa","¿Quién lo informó?", (d.quien_completa||{}).nombre || ME.nombre || ME.username)}
+    ${regCampo("contacto_completa","Su contacto (opcional)", (d.quien_completa||{}).contacto)}`;
   const campos = clase==="taller" ? `
     ${regCampo("titulo","Taller", d.titulo, {ancho:true})}
     ${regCampo("mes","Mes (AAAA-MM)", d.mes, {tipo:"month"})}
@@ -1809,8 +1813,9 @@ function regLeerFormulario(){
   $("regForm").querySelectorAll("[data-reg-franja]").forEach(el=>{
     if(el.value && Number(el.value)>0) datos.franjas[el.dataset.regFranja]=Number(el.value);
   });
-  datos.quien_completa={nombre:datos.nombre_completa||"", contacto:""};
-  delete datos.nombre_completa;
+  // El contacto viaja siempre: si no, al corregir se borraba el que dejó quien completó.
+  datos.quien_completa={nombre:datos.nombre_completa||"", contacto:datos.contacto_completa||""};
+  delete datos.nombre_completa; delete datos.contacto_completa;
   return datos;
 }
 async function regGuardar(r){
@@ -2809,7 +2814,7 @@ function evDate(e){
 }
 function evParts(e){
   const d=evDate(e);
-  const hora = e.todo_el_dia ? "Todo el día" : d.toLocaleTimeString("es-AR",{hour:'2-digit',minute:'2-digit'})+" h";
+  const hora = e.todo_el_dia ? "Todo el día" : d.toLocaleTimeString("es-AR",{hour:'2-digit',minute:'2-digit',hourCycle:'h23'})+" h";
   return { dia:d.getDate(), mes:MESES[d.getMonth()+1], dow:DOW[d.getDay()],
     mesAnio:`${MESES[d.getMonth()+1]} ${d.getFullYear()}`, hora };
 }
@@ -3043,9 +3048,9 @@ function mcell(m){
 }
 function cuSortVal(s){
   switch(cuSort.key){
-    case 'socio': return (s.apellido+" "+s.nombre).toLowerCase();
+    case 'socio': return s.apellido+" "+s.nombre;
     case 'matricula': return Number(s.matricula)||s.matricula;
-    case 'categoria': return (s.categoria||"").toLowerCase();
+    case 'categoria': return s.categoria||"";
     case 'estado': return s.estado==='debe'? s.debe : -1; // al día primero al asc
     case 'ultimo': return s.ultimo_pago? s.ultimo_pago.ord : -1; // sin pagos al final
     default: return 0;
@@ -3053,13 +3058,13 @@ function cuSortVal(s){
 }
 function cuotasFiltradas(){
   let socios=cuotasData.socios;
-  const q=cuotasFiltro.q.trim().toLowerCase();
-  if(q) socios=socios.filter(s=>(s.apellido+" "+s.nombre+" "+s.matricula).toLowerCase().includes(q));
+  const q=plano(cuotasFiltro.q.trim());
+  if(q) socios=socios.filter(s=>plano(s.apellido+" "+s.nombre+" "+s.matricula).includes(q));
   if(cuotasFiltro.solo==='deuda') socios=socios.filter(s=>s.estado==='debe');
   else if(cuotasFiltro.solo==='aldia') socios=socios.filter(s=>s.estado==='al_dia');
   if(cuSort.key){
-    socios=socios.slice().sort((a,b)=>{ const x=cuSortVal(a),y=cuSortVal(b);
-      return (x<y?-1:x>y?1:0)*cuSort.dir; });
+    // cmp compara con las reglas del castellano: "Álvarez" va antes que "Pérez".
+    socios=socios.slice().sort((a,b)=>cmp(cuSortVal(a),cuSortVal(b))*cuSort.dir);
   }
   return socios;
 }
@@ -3256,7 +3261,7 @@ let enviosOrigen="";
 
 function fechaHora(s){
   const d=new Date(s);
-  return isNaN(d)?esc(s||""):d.toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',dateStyle:'short',timeStyle:'short'});
+  return isNaN(d)?esc(s||""):d.toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',dateStyle:'short',timeStyle:'short',hourCycle:'h23'});
 }
 async function loadEnvios(){
   const el=$("enviosLista"); el.innerHTML=busyLine("Cargando historial…");
@@ -3474,12 +3479,14 @@ $("enviosRef").addEventListener("click",loadEnvios);
 // con Koha. Solo llega a esta sección quien tiene el permiso usuarios.admin.
 let usrDatos = { items:[], roles:[], subcomisiones:[] };
 
-async function loadUsuarios(){
+// `aviso`: la confirmación de lo que se acaba de hacer, que se muestra ya con la lista al día.
+async function loadUsuarios(aviso){
   const cont=$("usrLista"); cont.innerHTML=LOADER_SM; msg($("usrMsg"),"","");
   show($("usrForm"),false);
   try { usrDatos = await api("/api/usuarios"); }
   catch(err){ cont.innerHTML=""; msg($("usrMsg"),err.message,"error"); return; }
   renderUsuarios();
+  if(aviso) msg($("usrMsg"),aviso,"ok");
 }
 
 function renderUsuarios(){
@@ -3510,11 +3517,6 @@ function rolBadge(rol){
   const r=(usrDatos.roles||[]).find(x=>x.id===rol);
   const color={bibliotecaria:"magenta", comision:"navy", subcomision:"green"}[rol]||"gray";
   return `<span class="badge ${color}">${esc(r?r.titulo:rol)}</span>`;
-}
-
-function fechaHora(iso){
-  try { return new Date(iso).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
-  catch(_){ return String(iso).slice(0,16).replace("T"," "); }
 }
 
 // ── Alta / edición ──
@@ -3560,10 +3562,11 @@ async function usrGuardar(u, btn){
     subcomision:$("usrSub").value.trim(),
   };
   const restore=btnBusy(btn, u?"Guardando…":"Creando…");
+  let aviso="";
   try{
     if(u){
       await api("/api/usuarios/"+u.id,{method:"PUT",body:JSON.stringify(cuerpo)});
-      msg($("usrMsg"),`Listo: se actualizó <b>${esc(cuerpo.nombre)}</b>.`,"ok");
+      aviso=`Listo: se actualizó <b>${esc(cuerpo.nombre)}</b>.`;
     } else {
       cuerpo.usuario=$("usrUsuario").value.trim();
       cuerpo.password=$("usrPass").value.trim();
@@ -3571,7 +3574,7 @@ async function usrGuardar(u, btn){
       mostrarClave(d.password, d.usuario.nombre, d.usuario.usuario);
     }
     show($("usrForm"),false);
-    await loadUsuarios();
+    await loadUsuarios(aviso);
   } catch(err){ msg($("usrMsg"),err.message,"error"); }
   finally { restore(); }
 }
@@ -3621,8 +3624,7 @@ document.addEventListener("click", async (e)=>{
   if(accion==="activo"){
     try{
       await api("/api/usuarios/"+u.id,{method:"PUT",body:JSON.stringify({activo:!u.activo})});
-      msg($("usrMsg"),`<b>${esc(u.nombre)}</b> quedó ${u.activo?"desactivada/o":"activa/o"}.`,"ok");
-      await loadUsuarios();
+      await loadUsuarios(`<b>${esc(u.nombre)}</b> quedó ${u.activo?"desactivada/o":"activa/o"}.`);
     } catch(err){ msg($("usrMsg"),err.message,"error"); }
     return;
   }
@@ -3633,7 +3635,7 @@ document.addEventListener("click", async (e)=>{
                 `Si es alguien que quizás vuelva, conviene <b>desactivarla/o</b> en vez de borrar.`})) return;
     try{
       await api("/api/usuarios/"+u.id,{method:"DELETE"});
-      await loadUsuarios();
+      await loadUsuarios(`Se borró a <b>${esc(u.nombre)}</b>.`);
     } catch(err){ msg($("usrMsg"),err.message,"error"); }
   }
 });
@@ -3757,10 +3759,10 @@ function fechaHumana(iso){
   if(!iso) return "";
   const d=new Date(iso);
   return d.toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"})
-       + " · " + d.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+       + " · " + d.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
 }
 function soloHora(iso){
-  return iso ? new Date(iso).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) : "";
+  return iso ? new Date(iso).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hourCycle:"h23"}) : "";
 }
 
 function tarjetaSolicitud(s){
@@ -3809,10 +3811,19 @@ function tarjetaSolicitud(s){
 }
 
 // ── Formulario de solicitud ──
+// Opciones del <select> de espacio. Si el de la solicitud ya no está entre los activos
+// (lo dieron de baja), se agrega igual y queda elegido: si no, el navegador elegía el
+// primero de la lista y al guardar el pedido se mudaba de espacio sin que nadie lo decida.
+function opcionesEspacio(s, conCapacidad){
+  const items=(solEspaciosCache.items||[]).slice();
+  if(s && s.espacio_id && !items.some(e=>e.id===s.espacio_id))
+    items.unshift({id:s.espacio_id, nombre:`${s.espacio||"Espacio"} (dado de baja)`});
+  return items.map(e=>`<option value="${esc(e.id)}"${s&&s.espacio_id===e.id?" selected":""}>${esc(e.nombre)}`+
+    `${conCapacidad&&e.capacidad?` (hasta ${e.capacidad})`:""}</option>`).join("");
+}
 function solFormulario(s){
   const nuevo=!s;
-  const esp=(solEspaciosCache.items||[]).map(e=>
-    `<option value="${esc(e.id)}"${s&&s.espacio_id===e.id?" selected":""}>${esc(e.nombre)}${e.capacidad?` (hasta ${e.capacidad})`:""}</option>`).join("");
+  const esp=opcionesEspacio(s, true);
   if(!esp){
     msg($("solMsg"),"Todavía no hay espacios cargados. Alguien de la biblioteca tiene que crearlos primero (botón “Espacios”).","error");
     return;
@@ -3920,8 +3931,7 @@ async function solGuardar(s, btn){
 
 // ── Resolver: aprobar (pudiendo mover), rechazar o pedir cambios ──
 function solResolverModal(s){
-  const esp=(solEspaciosCache.items||[]).map(e=>
-    `<option value="${esc(e.id)}"${s.espacio_id===e.id?" selected":""}>${esc(e.nombre)}</option>`).join("");
+  const esp=opcionesEspacio(s, false);
   const bg=document.createElement("div"); bg.className="modal-bg";
   bg.innerHTML=`<div class="modal"><h3>Resolver: ${esc(s.titulo)}</h3>
     <p class="meta" style="margin:0 0 .8rem">Pidió ${esc((s.solicitante||{}).nombre||"")}

@@ -175,6 +175,20 @@ async def get_session(token: str = Depends(oauth2_scheme)) -> Sesion:
             detail="Sesión no encontrada (el servidor se reinició o expiró). Volvé a entrar.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if s.uid:
+        # Usuario propio de la app: lo que se le cambie vale ya, no cuando vuelva a entrar.
+        # Si lo desactivaron o lo borraron, la sesión abierta se corta acá mismo.
+        u = usuarios.obtener(s.uid)
+        if u is None or not u.get("activo"):
+            SESIONES.pop(sid, None)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Tu usuario ya no tiene acceso. Consultá con la biblioteca.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if u.get("rol", "") != s.rol or u.get("subcomision", "") != s.subcomision:
+            s.rol, s.subcomision = u.get("rol", ""), u.get("subcomision", "")
+            s.permisos = permisos.permisos_de(s.rol)
     return s
 
 

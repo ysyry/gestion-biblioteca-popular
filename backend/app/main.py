@@ -35,6 +35,16 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def _api_sin_cache(request, call_next):
+    """Las respuestas de la API son siempre de este momento: que ningún navegador las guarde.
+    Sin esto, Chrome se quedaba con un 410 de "link cerrado" aunque después se reabriera."""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
 @app.exception_handler(KohaError)
 async def koha_error_handler(_request, exc: KohaError):
     """Traduce errores de Koha a respuestas HTTP claras para el frontend."""

@@ -54,3 +54,43 @@ def test_ultimo_pago_mira_todos_los_anios():
                                          "texto": "octubre 2025", "ord": 202510}
     # Sin ninguna P → None
     assert cuotas._ultimo_pago([""] * 53) is None
+
+
+def _hoy(monkeypatch, anio, mes, dia):
+    real_date = cuotas.dt.date
+
+    class FakeDate(real_date):
+        @classmethod
+        def today(cls):
+            return real_date(anio, mes, dia)
+    monkeypatch.setattr(cuotas.dt, "date", FakeDate)
+
+
+def test_un_anio_nuevo_sigue_a_la_derecha_en_la_planilla(monkeypatch):
+    # Febrero de 2027: la planilla ya tiene el bloque 2027 (col 47) y Ana pagó enero.
+    _hoy(monkeypatch, 2027, 2, 10)
+    fila = [""] * 65
+    fila[1] = "100"; fila[2] = "Pérez"; fila[3] = "Ana"; fila[4] = "Activo"
+    fila[47] = "P"
+    monkeypatch.setattr(cuotas, "_read_rows", lambda: [[""] * 65, [""] * 65, fila])
+    monkeypatch.setattr(cuotas.pagos, "all_pagos", lambda: {})
+
+    assert cuotas.anios_disponibles()[0] == 2027
+    d = cuotas.estado_cuotas(max(cuotas.anios_disponibles()))
+    s = d["socios"][0]
+    assert d["anio"] == 2027
+    assert s["debe"] == 1 and s["impagos"] == ["Feb"]
+    assert s["ultimo_pago"]["texto"] == "enero 2027"
+
+
+def test_un_anio_sin_columnas_todavia_toma_los_pagos_de_la_app(monkeypatch):
+    # La planilla llega hasta 2026, pero el pago de enero 2027 se cargó desde la app.
+    _hoy(monkeypatch, 2027, 2, 10)
+    fila = [""] * 47
+    fila[1] = "100"; fila[2] = "Pérez"; fila[3] = "Ana"
+    monkeypatch.setattr(cuotas, "_read_rows", lambda: [[""] * 47, [""] * 47, fila])
+    monkeypatch.setattr(cuotas.pagos, "all_pagos", lambda: {"100": {"2027-01": {"por": "biblio"}}})
+
+    s = cuotas.estado_cuotas(2027)["socios"][0]
+    assert s["debe"] == 1 and s["impagos"] == ["Feb"]
+    assert s["ultimo_pago"]["texto"] == "enero 2027"

@@ -134,9 +134,7 @@ def crear(*, usuario: str, nombre: str, rol: str, password: str | None = None,
 
     with _LOCK:
         lista = _leer()
-        if any(_norm(u.get("usuario")) == _norm(usuario) or
-               (email and _norm(u.get("email")) == _norm(email)) for u in lista):
-            raise ErrorUsuario(f"Ya existe un usuario con '{usuario}'.")
+        _exigir_libres(lista, usuario, email)
         en_claro = password or password_aleatoria()
         nuevo = {
             "id": secrets.token_hex(8),
@@ -158,6 +156,17 @@ def crear(*, usuario: str, nombre: str, rol: str, password: str | None = None,
     return _publico(nuevo), en_claro
 
 
+def _exigir_libres(lista: list[dict], *valores: str, excepto: str | None = None) -> None:
+    """Se entra con el usuario o con el email, así que ninguno de los dos puede coincidir
+    con el usuario ni con el email de otra persona: si no, uno de los dos no entra nunca."""
+    for v in valores:
+        if not _norm(v):
+            continue
+        for u in lista:
+            if u.get("id") != excepto and _norm(v) in (_norm(u.get("usuario")), _norm(u.get("email"))):
+                raise ErrorUsuario(f"Ya existe un usuario con '{v.strip()}'.")
+
+
 _EDITABLES = {"nombre", "email", "rol", "subcomision", "activo"}
 
 
@@ -171,6 +180,8 @@ def actualizar(uid: str, cambios: dict, *, editado_por: str = "") -> dict:
         u = next((x for x in lista if x.get("id") == uid), None)
         if u is None:
             raise ErrorUsuario("El usuario no existe.")
+        if "email" in cambios:
+            _exigir_libres(lista, cambios["email"], excepto=uid)
         u.update(cambios)
         if u.get("rol") == "subcomision" and not (u.get("subcomision") or "").strip():
             raise ErrorUsuario("Un usuario de subcomisión necesita indicar cuál.")

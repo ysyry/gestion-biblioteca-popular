@@ -97,12 +97,27 @@ async def me(s: Sesion = Depends(get_session)):
 
 
 # ── Usuarios de la app (comisión directiva y subcomisiones) ──────────────────
+def _exigir_rol_asignable(s: Sesion, rol: str) -> None:
+    """Nadie da un rol que puede más que el suyo (la comisión no crea bibliotecarias)."""
+    if rol in permisos.ROLES and rol not in permisos.roles_que_asigna(s.rol):
+        raise HTTPException(status_code=403,
+                            detail=f"No podés dar el rol «{permisos.ETIQUETAS.get(rol, rol)}».")
+
+
+def _exigir_usuario_a_cargo(s: Sesion, uid: str) -> None:
+    """Ni editar, ni resetear, ni borrar a alguien con un rol que no se podría dar."""
+    u = usuarios.obtener(uid)
+    if u is not None:
+        _exigir_rol_asignable(s, u.get("rol", ""))
+
+
 @router.get("/usuarios", tags=["usuarios"])
 async def usuarios_listar(s: Sesion = Depends(requiere(permisos.USUARIOS_ADMIN))):
     """Usuarios propios de la app. Las bibliotecarias no están acá: entran con Koha."""
     return {
         "items": usuarios.listar(),
-        "roles": [{"id": r, "titulo": permisos.ETIQUETAS.get(r, r)} for r in permisos.ROLES],
+        "roles": [{"id": r, "titulo": permisos.ETIQUETAS.get(r, r)}
+                  for r in permisos.roles_que_asigna(s.rol)],
         "subcomisiones": usuarios.subcomisiones(),
     }
 
@@ -112,6 +127,7 @@ async def usuarios_crear(body: dict = Body(...),
                          s: Sesion = Depends(requiere(permisos.USUARIOS_ADMIN))):
     """Crea un usuario. Devuelve la contraseña en claro UNA sola vez, para dictarla."""
     b = body or {}
+    _exigir_rol_asignable(s, b.get("rol", ""))
     try:
         u, clave = usuarios.crear(
             usuario=b.get("usuario", ""),
@@ -133,6 +149,9 @@ async def usuarios_actualizar(uid: str, body: dict = Body(...),
     """Edita nombre, email, rol, subcomisión o si está activo."""
     if uid == s.uid and body.get("activo") is False:
         raise HTTPException(status_code=400, detail="No podés desactivarte a vos misma/o.")
+    _exigir_usuario_a_cargo(s, uid)
+    if "rol" in (body or {}):
+        _exigir_rol_asignable(s, body["rol"])
     try:
         return usuarios.actualizar(uid, body or {}, editado_por=s.usuario)
     except usuarios.ErrorUsuario as exc:
@@ -143,6 +162,7 @@ async def usuarios_actualizar(uid: str, body: dict = Body(...),
 async def usuarios_resetear(uid: str, body: dict = Body(default={}),
                             s: Sesion = Depends(requiere(permisos.USUARIOS_ADMIN))):
     """Resetea la contraseña. Devuelve la nueva en claro, una sola vez."""
+    _exigir_usuario_a_cargo(s, uid)
     try:
         clave = usuarios.resetear_password(
             uid, nueva=(body or {}).get("password") or None, editado_por=s.usuario)
@@ -156,6 +176,7 @@ async def usuarios_borrar(uid: str, s: Sesion = Depends(requiere(permisos.USUARI
     """Baja definitiva. En general conviene desactivar en vez de borrar."""
     if uid == s.uid:
         raise HTTPException(status_code=400, detail="No podés borrarte a vos misma/o.")
+    _exigir_usuario_a_cargo(s, uid)
     try:
         usuarios.borrar(uid, editado_por=s.usuario)
     except usuarios.ErrorUsuario as exc:
