@@ -154,3 +154,10 @@ def test_la_pantalla_recibe_el_catalogo(cliente):
     d = cliente.get("/api/mail/etiquetas").json()
     assert [g["grupo"] for g in d["socio"]] == ["Datos del socio", "Libros del socio", "Cuota societaria"]
     assert [g["grupo"] for g in d["interno"]] == ["Préstamos", "Cuotas"]
+
+
+def test_cada_etiqueta_trae_explicacion_y_ejemplo():
+    for juego in etiquetas.catalogo().values():
+        for g in juego:
+            for i in g["items"]:
+                assert i["descripcion"].strip() and i["ejemplo"].strip(), i["etiqueta"]

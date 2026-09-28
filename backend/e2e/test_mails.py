@@ -200,3 +200,29 @@ def test_lo_enviado_queda_en_el_historial(bibliotecaria: Page, bandeja):
 
     ir_a(page, "envios")
     expect(page.locator("#enviosView")).to_contain_text("Aviso del historial")
+
+
+def test_la_ayuda_explica_cada_etiqueta_con_un_ejemplo(bibliotecaria: Page):
+    page = bibliotecaria
+    ir_a(page, "mails")
+    # Al pasar el mouse por un chip: qué pone y un ejemplo.
+    chip = page.locator('#mailVars code[data-v="meses_impagos"]')
+    expect(chip).to_have_attribute("title", re.compile(r"Cuáles son esos meses.*\nEj\.: Jul, Ago, Sep", re.S))
+
+    # Sin destinatarios, la ayuda muestra el ejemplo fijo de cada una.
+    page.locator("#mailVars .help-btn").click()
+    filas = page.locator(".help-row")
+    expect(filas).to_have_count(len(_todas_las_etiquetas()))
+    expect(filas.filter(has_text="{{ultimo_mes_pago}}")).to_contain_text("Ejemplo: junio 2026")
+    page.locator("#ayudaOk").click()
+
+    # Con un socio agregado, muestra lo que le saldría a él.
+    _buscar_y_agregar(page, "Pérez", "100")
+    _escribir(page, "x", "{{vencidos}}")
+    expect(page.locator("#mailPreview")).to_contain_text("Rayuela")
+    page.locator("#mailVars .help-btn").click()
+    debe, _ = datos.deuda_ana()
+    expect(filas.filter(has_text="{{meses_debe}}")).to_contain_text(f"Para Ana Pérez sale: {debe}")
+    expect(filas.filter(has_text="{{vencidos}}")).to_contain_text("Para Ana Pérez sale: • Rayuela")
+    expect(filas.filter(has_text="{{ultimo_mes_pago}}")).to_contain_text(datos.ULTIMO_PAGO_ANA)
+    page.locator("#ayudaOk").click()

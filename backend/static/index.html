@@ -138,6 +138,10 @@
   .help-list { display:flex; flex-direction:column; gap:.5rem; max-height:52vh; overflow:auto; }
   .help-row { display:flex; gap:.6rem; align-items:flex-start; font-size:.86rem; line-height:1.45; }
   .help-row code { flex:0 0 13rem; }   /* ancho fijo: entra {{total_deudores_cuota}} y las descripciones quedan alineadas */
+  .help-ej { display:block; margin-top:.25rem; padding:.3rem .5rem; border-radius:6px; background:#f5f6fa;
+             color:#333; font-size:.8rem; white-space:pre-line; }
+  .help-ej b { font-weight:600; color:var(--muted); }
+  .help-ej.real { background:#e3f5ec; }
   @media (max-width:560px){ .help-row { flex-direction:column; gap:.15rem; } .help-row code { flex:none; } }
   .help-grupo { font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
                 color:var(--muted); margin-top:.4rem; }
@@ -1039,18 +1043,36 @@ function chipsEtiquetas(juego, {insertar=false}={}){
   const grupos=(ETIQ&&ETIQ[juego])||[];
   return grupos.map((g,i)=>`<p class="meta${insertar?" vars":""}" style="margin:.35rem 0 0">${esc(g.grupo)}:
     ${i===0?`<button class="help-btn" data-help="${juego}" title="¿Qué significa cada etiqueta?">?</button>`:""}
-    ${g.items.map(x=>`<code${insertar?` data-v="${esc(x.etiqueta)}"`:""}>{{${esc(x.etiqueta)}}}</code>`).join(" ")}</p>`).join("");
+    ${g.items.map(x=>`<code title="${esc(ayudaCorta(x))}"${insertar?` data-v="${esc(x.etiqueta)}"`:""}>{{${esc(x.etiqueta)}}}</code>`).join(" ")}</p>`).join("");
+}
+// Lo que se ve al pasar el mouse por un chip: qué pone y un ejemplo.
+function ayudaCorta(x){
+  const d=document.createElement("div"); d.innerHTML=x.descripcion;   // sin las <b>
+  return `${d.textContent}\nEj.: ${x.ejemplo||""}`;
+}
+// En Mails, con socios agregados: lo que saldría de verdad para el primero.
+function valoresReales(clave){
+  if(clave!=="socio" || currentTab!=="mails" || !recipients.length) return null;
+  const r=recipients[0];
+  return { quien:[r.nombre,r.apellido].filter(Boolean).join(" ")||r.carnet, v:recipVars(r) };
 }
 async function mostrarAyuda(clave){
   const h=AYUDA[clave]; if(!h) return;
   const grupos=(await cargarEtiquetas())[clave]||[];
+  const real=valoresReales(clave);
   const bg=document.createElement("div"); bg.className="modal-bg";
   // Las descripciones vienen del catálogo del servidor y traen <b> a propósito.
   bg.innerHTML=`<div class="modal" style="max-width:620px">
     <h3>${esc(h.titulo)}</h3>
-    <p class="meta" style="margin:.2rem 0 .8rem;line-height:1.5">${esc(h.intro)}</p>
+    <p class="meta" style="margin:.2rem 0 .8rem;line-height:1.5">${esc(h.intro)}
+      ${real ? `<br>En verde, lo que le saldría a <b>${esc(real.quien)}</b> (el primer destinatario).`
+        : clave==="socio" && currentTab==="mails" ? "<br>Agregá un socio a los destinatarios para ver lo que le saldría a él." : ""}</p>
     <div class="help-list">${grupos.map(g=>`<div class="help-grupo">${esc(g.grupo)}</div>`+
-      g.items.map(x=>`<div class="help-row"><code>{{${esc(x.etiqueta)}}}</code><span>${x.descripcion}</span></div>`).join("")).join("")}</div>
+      g.items.map(x=>`<div class="help-row"><code>{{${esc(x.etiqueta)}}}</code><span>${x.descripcion}`+
+        (real && x.etiqueta in real.v
+          ? `<span class="help-ej real"><b>Para ${esc(real.quien)} sale:</b> ${esc(real.v[x.etiqueta])}</span>`
+          : `<span class="help-ej"><b>Ejemplo:</b> ${esc(x.ejemplo||"")}</span>`)+
+        `</span></div>`).join("")).join("")}</div>
     <p class="meta" style="margin:.8rem 0 0;line-height:1.5">Escribí la etiqueta tal cual en el asunto o el cuerpo. En la pestaña <b>Mails</b> además podés tocarla para insertarla donde tenés el cursor.</p>
     <div class="row-btns"><button class="primary" style="width:auto;margin:0" id="ayudaOk">Entendido</button></div></div>`;
   document.body.appendChild(bg);
@@ -2413,8 +2435,8 @@ async function ensureCuotaMap(){
 function recipVars(r){
   const v=Object.assign(
     {nombre:r.nombre||"", apellido:r.apellido||"", carnet:r.carnet||"", email:r.email||"",
-     vencidos:"ninguno", por_vencer:"ninguno", prestamos:"ninguno",
-     cantidad_vencidos:"0", cantidad_por_vencer:"0", cantidad_prestamos:"0",
+     vencidos:"ninguno", activos:"ninguno", por_vencer:"ninguno", prestamos:"ninguno",
+     cantidad_vencidos:"0", cantidad_activos:"0", cantidad_por_vencer:"0", cantidad_prestamos:"0",
      meses_debe:"0", meses_impagos:"—", ultimo_mes_pago:"—"},
     r.ctx||{});
   // Completa la cuota desde la planilla por carnet (si está cargada).
