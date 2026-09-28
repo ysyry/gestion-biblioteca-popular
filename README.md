@@ -38,6 +38,23 @@ App en `http://localhost:8000` · documentación de la API en `/docs`.
 Los reportes SQL se crean una vez en Koha con `python scripts/setup_reports.py`
 (ver `backend/sql/`).
 
+## Pruebas
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+playwright install chromium   # una sola vez
+
+pytest                        # unitarias y de API (tests/)
+pytest e2e                    # de punta a punta: un navegador recorre la app
+pytest e2e --headed           # lo mismo, mirando el navegador
+```
+
+Las de punta a punta (`backend/e2e/`) levantan la app de verdad con Koha, la planilla
+de Google y el SMTP simulados (`e2e/servidor.py`, datos en `e2e/datos.py`): nada sale
+a internet y cada mail que se mandaría queda en una bandeja para revisar qué le llega
+a cada socio. Un error de JavaScript en la página hace fallar la prueba.
+
 ## Deploy
 
 Pensado para correr con Docker. Ver [`DEPLOY.md`](DEPLOY.md).
